@@ -1,5 +1,5 @@
 appId: com.electron.app
-productName: client
+productName: 'Conqueror III Client'
 directories:
   buildResources: build
 files:
@@ -12,7 +12,7 @@ files:
 asarUnpack:
   - resources/**
 win:
-  executableName: client
+  executableName: 'conqueror-iii-client'
 nsis:
   artifactName: ${name}-${version}-setup.${ext}
   shortcutName: ${productName}
