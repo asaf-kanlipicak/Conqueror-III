@@ -1,28 +1,13 @@
-import { useState } from 'react'
+import { useGameState } from './hooks/useGameState'
+import { GameGrid } from './components/GameGrid'
 
 function App(): React.JSX.Element {
-  const [message, setMessage] = useState<string>('')
-
-  const fetchMessage = async (): Promise<void> => {
-    try {
-      const response = await fetch('http://0.0.0.0:8000')
-      const data = await response.json()
-      setMessage(data)
-    } catch (error) {
-      console.error('Error fetching message:', error)
-      setMessage('Error fetching message')
-    }
-  }
+  const { grid, handleTileClick } = useGameState()
 
   return (
-    <div className="container">
-      <h1>Conqueror III</h1>
-      <div className="actions">
-        <button onClick={fetchMessage}>
-          Get Message
-        </button>
-      </div>
-      {message && <div className="message">{message}</div>}
+    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', padding: '20px' }}>
+      <h1>Tile Game</h1>
+      <GameGrid grid={grid} onTileClick={handleTileClick} />
     </div>
   )
 }
