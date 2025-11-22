@@ -13,7 +13,7 @@ export function GameGrid({ grid, onTileClick }: GameGridProps): React.JSX.Elemen
     return (
         <div style={{
             display: 'grid',
-            gridTemplateColumns: 'repeat(10, 30px)',
+            gridTemplateColumns: 'repeat(20, 30px)',
             gap: '2px',
             backgroundColor: '#ccc',
             padding: '2px'
