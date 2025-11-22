@@ -6,21 +6,22 @@ export function useGameState() {
     const ws = useRef<WebSocket | null>(null)
 
     useEffect(() => {
-        ws.current = new WebSocket(API_BASE_URL)
+        const socket = new WebSocket(API_BASE_URL)
+        ws.current = socket
 
-        ws.current.onopen = () => {
+        socket.onopen = () => {
             console.log('Connected to WebSocket')
         }
 
-        ws.current.onerror = (error) => {
+        socket.onerror = (error) => {
             console.error('WebSocket error:', error)
         }
 
-        ws.current.onclose = () => {
+        socket.onclose = () => {
             console.log('WebSocket connection closed')
         }
 
-        ws.current.onmessage = (event) => {
+        socket.onmessage = (event) => {
             const message = JSON.parse(event.data)
             if (message.type === 'init') {
                 setGrid(message.data)
@@ -35,7 +36,7 @@ export function useGameState() {
         }
 
         return () => {
-            ws.current?.close()
+            socket.close()
         }
     }, [])
 

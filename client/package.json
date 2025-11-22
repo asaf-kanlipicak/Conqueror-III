@@ -3,8 +3,8 @@
   "version": "0.1.0",
   "description": "Conqueror III Client",
   "main": "./out/main/index.js",
-  "author": "example.com",
-  "homepage": "https://electron-vite.org",
+  "author": "Asaf31214",
+  "homepage": "https://conqueror-iii.asaf.cloud",
   "scripts": {
     "format": "prettier --write .",
     "lint": "eslint --cache .",
@@ -17,7 +17,6 @@
     "postinstall": "electron-builder install-app-deps",
     "build:unpack": "npm run build && electron-builder --dir",
     "build:win": "npm run build && electron-builder --win",
-    "build:mac": "electron-vite build && electron-builder --mac",
     "build:linux": "electron-vite build && electron-builder --linux"
   },
   "dependencies": {
