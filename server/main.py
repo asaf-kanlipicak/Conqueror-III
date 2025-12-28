@@ -6,7 +6,6 @@ import uvicorn
 from connection.manager import Manager
 from game.dispatcher import Dispatcher, ResultType, Result, Command
 from game.models import Player
-from game.state import State
 
 app = FastAPI()
 
@@ -18,16 +17,15 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-state = State()
 manager = Manager()
-dispatcher = Dispatcher(state, manager)
+dispatcher = Dispatcher(manager)
 websocket_player_map: Dict[WebSocket, Player] = {}
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await manager.connect(websocket)
     try:
-        result = Result(type=ResultType.CONNECT_SUCCESS, data=state.game)
+        result = Result(type=ResultType.CONNECT_SUCCESS, data=dispatcher.state.game)
         await websocket.send_text(result.model_dump_json())
         while True:
             data = await websocket.receive_json()

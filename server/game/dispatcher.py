@@ -2,16 +2,18 @@ from enum import StrEnum
 from pydantic import BaseModel, SerializeAsAny
 
 from connection.manager import Manager
-from game.enums import PlayerColor
-from game.models import Player, Tile
+from game.models import Player
+from game.schemas import JoinData, AttackData, TileUpdateData
 from game.state import State
 
 
 class CommandType(StrEnum):
+    RESET = "RESET"
     JOIN = "JOIN"
     ATTACK = "ATTACK"
 
 class EventType(StrEnum):
+    GAME_UPDATE = "GAME_UPDATE"
     GRID_UPDATE = "GRID_UPDATE"
     PLAYERS_UPDATE = "PLAYERS_UPDATE"
     TILE_UPDATE = "TILE_UPDATE"
@@ -19,19 +21,6 @@ class EventType(StrEnum):
 class ResultType(StrEnum):
     CONNECT_SUCCESS = "CONNECT_SUCCESS"
     JOIN_SUCCESS = "JOIN_SUCCESS"
-
-class JoinData(BaseModel):
-    name: str
-    color: PlayerColor
-
-class AttackData(BaseModel):
-    x: int
-    y: int
-
-class TileUpdateData(BaseModel):
-    x: int
-    y: int
-    tile: Tile
 
 class Command(BaseModel):
     type: CommandType
@@ -46,15 +35,21 @@ class Result(BaseModel):
     data: SerializeAsAny[BaseModel]
 
 class Dispatcher:
-    def __init__(self, state: State,  manager: Manager):
-        self.state = state
+    def __init__(self, manager: Manager):
+        self.state = State()
         self.manager = manager
         self.command_map = {
-            CommandType.JOIN: self.dispatch_player_join,
+            CommandType.RESET: self.dispatch_reset,
+            CommandType.JOIN: self.dispatch_join,
             CommandType.ATTACK: self.dispatch_attack
         }
 
-    async def dispatch_player_join(self, _, command: Command):
+    async def dispatch_reset(self, *_):
+        self.state = State()
+        event = Event(type=EventType.GAME_UPDATE, data=self.state.game)
+        await self.manager.broadcast(event)
+
+    async def dispatch_join(self, _, command: Command):
         assert isinstance(command.data, JoinData)
         data = command.data
         player = Player(name=data.name, color=data.color)
