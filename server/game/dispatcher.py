@@ -24,7 +24,7 @@ class ResultType(StrEnum):
 
 class Command(BaseModel):
     type: CommandType
-    data: JoinData | AttackData
+    data: JoinData | AttackData | None = None
 
 class Event(BaseModel):
     type: EventType
