@@ -8,11 +8,11 @@ interface LoginProps {
 
 export function Login({ onJoin }: LoginProps): React.JSX.Element {
     const [name, setName] = useState('')
-    const [color, setColor] = useState<PlayerColor>(PlayerColor.BLUE)
+    const [color, setColor] = useState<PlayerColor>()
 
     const handleSubmit = (e: React.FormEvent) => {
         e.preventDefault()
-        if (name.trim()) {
+        if (name.trim() && color) {
             onJoin(name, color)
         }
     }
@@ -41,7 +41,9 @@ export function Login({ onJoin }: LoginProps): React.JSX.Element {
                                 key={c}
                                 type="button"
                                 onClick={() => setColor(c)}
-                                className={`w-8 h-8 rounded-full cursor-pointer p-0 transition-all ${getColorClass(c)} ${color === c ? 'border-2 border-white shadow-[0_0_8px_rgba(255,255,255,0.3)]' : 'border-2 border-transparent'
+                                className={`w-8 h-8 rounded-full cursor-pointer p-0 transition-all duration-250 border-2 border-transparent ${getColorClass(c)} ${color === c
+                                    ? 'ring-2 ring-white shadow-[0_0_10px_#fff,0_0_20px_#fff] scale-110 z-10'
+                                    : 'hover:scale-105 hover:shadow-[0_0_10px_rgba(255,255,255,0.3)]'
                                     }`}
                                 title={c}
                             />
