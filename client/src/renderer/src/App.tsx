@@ -10,14 +10,14 @@ function App(): React.JSX.Element {
   if (!game) {
     // Waiting for connection
     return (
-      <div className="flex flex-col justify-center items-center h-screen w-screen bg-[#1e1e1e] text-[#e0e0e0] gap-4">
+      <div className="flex flex-col justify-center items-center h-screen w-screen bg-zinc-900 text-zinc-200 gap-4">
         <div className="text-xl">Connecting to server...</div>
       </div>
     )
   }
 
   return (
-    <div className="flex justify-evenly items-center w-screen h-screen bg-[#1e1e1e] text-[#e0e0e0] p-8 box-border">
+    <div className="flex justify-evenly items-center w-screen h-screen bg-zinc-900 text-zinc-200 p-8 box-border">
       <div className="flex flex-col items-center">
         <GameGrid grid={game.grid} onTileClick={handleTileClick} />
       </div>
