@@ -11,13 +11,17 @@ function App(): React.JSX.Element {
     // Waiting for connection
     return <div style={{
       display: 'flex',
+      flexDirection: 'column',
       justifyContent: 'center',
       alignItems: 'center',
       height: '100vh',
-      fontSize: '1.2rem',
+      width: '100vw',
       backgroundColor: '#1e1e1e',
-      color: '#e0e0e0'
-    }}>Connecting to server...</div>
+      color: '#e0e0e0',
+      gap: '1rem'
+    }}>
+      <div style={{ fontSize: '1.2rem' }}>Connecting to server...</div>
+    </div>
   }
 
   return (
@@ -26,14 +30,13 @@ function App(): React.JSX.Element {
       justifyContent: 'space-evenly',
       alignItems: 'center',
       width: '100vw',
-      minHeight: '100vh',
+      height: '100vh',
       backgroundColor: '#1e1e1e',
       color: '#e0e0e0',
       padding: '2rem',
       boxSizing: 'border-box'
     }}>
       <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-        <h1 style={{ marginBottom: '2rem' }}>Conqueror III</h1>
         <GameGrid grid={game.grid} onTileClick={handleTileClick} />
       </div>
 
