@@ -83,6 +83,10 @@ export function useGameState() {
                         grid: gridData
                     }
                 })
+            } else if (message.type === EventType.GAME_UPDATE) {
+                const gameData = message.data as Game
+                setGame(gameData)
+                setCurrentPlayer(null)
             }
         }
 
@@ -101,6 +105,14 @@ export function useGameState() {
         }
     }
 
+    const resetGame = () => {
+        if (ws.current && ws.current.readyState === WebSocket.OPEN) {
+            ws.current.send(JSON.stringify({
+                type: CommandType.RESET
+            }))
+        }
+    }
+
     const handleTileClick = (x: number, y: number) => {
         if (ws.current && ws.current.readyState === WebSocket.OPEN && currentPlayer) {
             const attackData: AttackData = { x, y }
@@ -111,5 +123,5 @@ export function useGameState() {
         }
     }
 
-    return { game, currentPlayer, joinGame, handleTileClick }
+    return { game, currentPlayer, joinGame, handleTileClick, resetGame }
 }

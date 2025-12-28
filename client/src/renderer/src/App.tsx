@@ -5,7 +5,7 @@ import { Login } from './components/Login'
 import { PlayerList } from './components/PlayerList'
 
 function App(): React.JSX.Element {
-  const { game, currentPlayer, joinGame, handleTileClick } = useGameState()
+  const { game, currentPlayer, joinGame, handleTileClick, resetGame } = useGameState()
 
   if (!game) {
     // Waiting for connection
@@ -40,9 +40,29 @@ function App(): React.JSX.Element {
         <GameGrid grid={game.grid} onTileClick={handleTileClick} />
       </div>
 
-      <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem', minWidth: '300px' }}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: '2rem', minWidth: '250px' }}>
         {game.players && <PlayerList players={game.players.players} currentPlayer={currentPlayer} />}
         {!currentPlayer && <Login onJoin={joinGame} />}
+
+        <button
+          onClick={resetGame}
+          style={{
+            padding: '0.5rem',
+            backgroundColor: '#ef4444',
+            color: 'white',
+            border: 'none',
+            borderRadius: '6px',
+            fontSize: '0.9rem',
+            fontWeight: 600,
+            cursor: 'pointer',
+            marginTop: '1rem',
+            width: '100%'
+          }}
+          onMouseOver={(e) => e.currentTarget.style.backgroundColor = '#dc2626'}
+          onMouseOut={(e) => e.currentTarget.style.backgroundColor = '#ef4444'}
+        >
+          Reset Game
+        </button>
       </div>
     </div>
   )

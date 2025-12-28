@@ -12,11 +12,12 @@ export function PlayerList({ players, currentPlayer }: PlayerListProps): React.J
             padding: '1.5rem',
             border: '1px solid #333',
             borderRadius: '12px',
-            width: '250px',
+            width: '100%',
             backgroundColor: '#1e1e1e',
             alignSelf: 'flex-start',
             boxShadow: '0 4px 6px rgba(0,0,0,0.3)',
-            color: '#e0e0e0'
+            color: '#e0e0e0',
+            boxSizing: 'border-box'
         }}>
             <h3 style={{ marginTop: 0, marginBottom: '1rem', borderBottom: '1px solid #333', paddingBottom: '0.5rem', color: '#fff' }}>Players</h3>
             <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>

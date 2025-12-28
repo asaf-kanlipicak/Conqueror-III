@@ -27,8 +27,9 @@ export function Login({ onJoin }: LoginProps): React.JSX.Element {
             boxShadow: '0 4px 6px rgba(0,0,0,0.3)',
             border: '1px solid #333',
             color: '#e0e0e0',
-            width: '250px',
-            alignSelf: 'flex-start'
+            width: '100%',
+            alignSelf: 'flex-start',
+            boxSizing: 'border-box'
         }}>
             <h2 style={{ marginBottom: '1rem', color: '#fff', fontSize: '1.25rem', width: '100%' }}>Join Game</h2>
             <form onSubmit={handleSubmit} noValidate style={{ display: 'flex', flexDirection: 'column', gap: '1rem', width: '100%' }}>
@@ -56,15 +57,20 @@ export function Login({ onJoin }: LoginProps): React.JSX.Element {
 
                 <div>
                     <label style={{ display: 'block', marginBottom: '0.4rem', fontWeight: 500, color: '#aaa', fontSize: '0.9rem' }}>Color</label>
-                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', justifyContent: 'center' }}>
+                    <div style={{
+                        display: 'grid',
+                        gridTemplateColumns: 'repeat(4, 1fr)',
+                        gap: '0.75rem',
+                        justifyItems: 'center'
+                    }}>
                         {Object.values(PlayerColor).map((c) => (
                             <button
                                 key={c}
                                 type="button"
                                 onClick={() => setColor(c)}
                                 style={{
-                                    width: '28px',
-                                    height: '28px',
+                                    width: '32px',
+                                    height: '32px',
                                     backgroundColor: c,
                                     borderRadius: '50%',
                                     border: color === c ? '2px solid #fff' : '2px solid transparent',

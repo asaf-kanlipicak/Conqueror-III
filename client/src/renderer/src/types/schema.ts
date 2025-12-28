@@ -20,11 +20,13 @@ export enum BotColor {
 }
 
 export enum CommandType {
+    RESET = 'RESET',
     JOIN = 'JOIN',
     ATTACK = 'ATTACK'
 }
 
 export enum EventType {
+    GAME_UPDATE = 'GAME_UPDATE',
     GRID_UPDATE = 'GRID_UPDATE',
     PLAYERS_UPDATE = 'PLAYERS_UPDATE',
     TILE_UPDATE = 'TILE_UPDATE'
@@ -71,7 +73,7 @@ export interface AttackData {
 // Helper types for WebSocket messages
 export interface Command {
     type: CommandType
-    data: JoinData | AttackData
+    data?: JoinData | AttackData
 }
 
 export interface Event {
