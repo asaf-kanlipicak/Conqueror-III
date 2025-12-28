@@ -1,5 +1,5 @@
 from enum import StrEnum
-from pydantic import BaseModel
+from pydantic import BaseModel, SerializeAsAny
 
 from connection.manager import Manager
 from game.enums import PlayerColor
@@ -39,11 +39,11 @@ class Command(BaseModel):
 
 class Event(BaseModel):
     type: EventType
-    data: BaseModel
+    data: SerializeAsAny[BaseModel]
 
 class Result(BaseModel):
     type: ResultType
-    data: BaseModel
+    data: SerializeAsAny[BaseModel]
 
 class Dispatcher:
     def __init__(self, state: State,  manager: Manager):
