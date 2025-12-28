@@ -1,5 +1,5 @@
 appId: com.asaf.conqueror-iii
-productName: 'Conqueror-III-Client'
+productName: 'Conqueror III Client'
 directories:
   buildResources: build
 files:
