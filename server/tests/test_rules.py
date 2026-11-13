@@ -174,6 +174,48 @@ def test_offline_player_is_skipped_and_can_resume(game):
     assert current(state).id == bob.id
 
 
+def test_water_takes_a_stack_without_loot(game, monkeypatch):
+    state, alice, _ = game
+    monkeypatch.setattr(random, "random", lambda: 0.0)
+    water = state.tile(Coord(x=1, y=0))
+    water.kind = TileKind.WATER
+    water.owner = None
+    water.soldiers = 0
+    order(state, alice, (0, 0), (1, 0))
+    state.end_turn(alice.id)
+    assert water.kind == TileKind.WATER
+    assert water.owner == alice.id
+    assert water.soldiers == START
+
+
+def test_water_battle_pays_no_loot(game, monkeypatch):
+    state, alice, bob = game
+    monkeypatch.setattr(random, "random", lambda: 0.0)
+    water = state.tile(Coord(x=1, y=0))
+    water.kind = TileKind.WATER
+    water.owner = bob.id
+    water.soldiers = 5
+    order(state, alice, (0, 0), (1, 0))
+    state.end_turn(alice.id)
+    attacker, defender = START, 5
+    survivors = attacker - attacker * defender // (2 * (attacker + defender))
+    assert water.owner == alice.id
+    assert water.soldiers == survivors
+    assert water.kind == TileKind.WATER
+
+
+def test_water_produces_nothing(game):
+    state, alice, bob = game
+    sea = state.tile(Coord(x=1, y=0))
+    sea.kind = TileKind.WATER
+    sea.owner = alice.id
+    sea.soldiers = 40
+    state.end_turn(alice.id)
+    state.end_turn(bob.id)
+    assert sea.soldiers == 40
+    assert state.tile(Coord(x=0, y=0)).soldiers == START + PRODUCTION
+
+
 def test_elimination_clears_water_and_names_a_winner(game, monkeypatch):
     state, alice, bob = game
     monkeypatch.setattr(random, "random", lambda: 0.0)
