@@ -1,6 +1,6 @@
-export enum TileType {
-  PLAYER = 'player',
-  BOT = 'bot'
+export enum TileKind {
+  LAND = 'land',
+  WATER = 'water'
 }
 
 export enum PlayerColor {
@@ -14,80 +14,64 @@ export enum PlayerColor {
   WHITE = 'white'
 }
 
-export enum BotColor {
-  GREY = 'grey',
-  BLACK = 'black'
-}
-
 export enum CommandType {
-  RESET = 'RESET',
   JOIN = 'JOIN',
-  ATTACK = 'ATTACK'
+  RESUME = 'RESUME',
+  START = 'START',
+  MOVE = 'MOVE',
+  CANCEL = 'CANCEL',
+  END_TURN = 'END_TURN',
+  RESET = 'RESET'
 }
 
-export enum EventType {
-  GAME_UPDATE = 'GAME_UPDATE',
-  GRID_UPDATE = 'GRID_UPDATE',
-  PLAYERS_UPDATE = 'PLAYERS_UPDATE',
-  TILE_UPDATE = 'TILE_UPDATE'
-}
-
-export enum ResultType {
+export enum MessageType {
   CONNECT_SUCCESS = 'CONNECT_SUCCESS',
-  JOIN_SUCCESS = 'JOIN_SUCCESS'
+  JOIN_SUCCESS = 'JOIN_SUCCESS',
+  ORDER_ACCEPTED = 'ORDER_ACCEPTED',
+  ORDER_CANCELLED = 'ORDER_CANCELLED',
+  ERROR = 'ERROR',
+  GAME_UPDATE = 'GAME_UPDATE'
 }
 
-export interface Player {
-  name: string
-  color: PlayerColor
-}
-
-export interface Players {
-  players: Player[]
+export interface Coord {
+  x: number
+  y: number
 }
 
 export interface Tile {
-  type: TileType
-  color: PlayerColor | BotColor
+  kind: TileKind
+  owner: string | null
+  soldiers: number
 }
 
-export interface Grid {
-  tiles: Tile[][]
+export interface Player {
+  id: string
+  name: string
+  color: PlayerColor
+  eliminated: boolean
+  online: boolean
 }
 
 export interface Game {
-  grid: Grid
-  players: Players
+  tiles: Tile[][]
+  players: Player[]
+  turn: number
+  round: number
+  started: boolean
+  winner: string | null
+  log: string[]
 }
 
-export interface JoinData {
-  name: string
-  color: PlayerColor
+export interface Move {
+  source: Coord
+  target: Coord
 }
 
-export interface AttackData {
-  x: number
-  y: number
+export interface GameMessage {
+  type: MessageType
+  data?: unknown
 }
 
-// Helper types for WebSocket messages
-export interface Command {
-  type: CommandType
-  data?: JoinData | AttackData
-}
-
-export interface Event {
-  type: EventType
-  data: unknown // Dynamic based on type
-}
-
-export interface Result {
-  type: ResultType
-  data: unknown // Dynamic based on type
-}
-
-export interface TileUpdateData {
-  x: number
-  y: number
-  tile: Tile
+export interface ErrorData {
+  message: string
 }

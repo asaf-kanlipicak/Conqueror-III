@@ -1,39 +1,53 @@
-import React from 'react'
-import { useGameState } from './hooks/useGameState'
-import { GameGrid } from './components/GameGrid'
-import { Login } from './components/Login'
-import { PlayerList } from './components/PlayerList'
+import { Board } from './components/Board'
+import { Lobby } from './components/Lobby'
+import { LogFeed } from './components/LogFeed'
+import { Roster } from './components/Roster'
+import { TurnPanel } from './components/TurnPanel'
+import { useGame } from './hooks/useGame'
 
-function App(): React.JSX.Element {
-  const { game, currentPlayer, joinGame, handleTileClick, resetGame } = useGameState()
+function App() {
+  const { game, myId, myTurn, orders, error, status, join, start, reset, order, cancel, cancelAll, endTurn } = useGame()
 
   if (!game) {
-    // Waiting for connection
     return (
-      <div className="flex flex-col justify-center items-center h-screen w-screen bg-zinc-900 text-zinc-200 gap-4">
-        <div className="text-xl">Connecting to server...</div>
-      </div>
+      <main className="boot">
+        <p className="label">{status === 'offline' ? 'looking for a table' : 'setting up'}</p>
+      </main>
     )
   }
 
   return (
-    <div className="flex justify-evenly items-center w-screen h-screen bg-zinc-900 text-zinc-200 p-8 box-border">
-      <div className="flex flex-col items-center">
-        <GameGrid grid={game.grid} onTileClick={handleTileClick} />
-      </div>
+    <main className="app">
+      <section className="stage">
+        <div className="sheet">
+          <header className="masthead">
+            <h1>Conqueror III</h1>
+            <span className="label">{game.started ? `round ${game.round}` : 'lobby'}</span>
+          </header>
 
-      <div className="flex flex-col gap-8 min-w-[250px]">
-        {game.players && <PlayerList players={game.players.players} currentPlayer={currentPlayer} />}
-        {!currentPlayer && <Login onJoin={joinGame} />}
+          <Board game={game} myId={myId} orders={orders} onOrder={order} onCancel={cancel} />
 
-        <button
-          onClick={resetGame}
-          className="p-2 bg-red-500 text-white border-none rounded-md text-sm font-semibold cursor-pointer mt-4 w-full hover:bg-red-600 transition-colors"
-        >
-          Reset Game
-        </button>
-      </div>
-    </div>
+          {error && <p className="notice">{error}</p>}
+          {status !== 'live' && <p className="notice">connection lost, coming back…</p>}
+        </div>
+      </section>
+
+      <aside className="side">
+        <Roster game={game} myId={myId} />
+        <Lobby game={game} myId={myId} onJoin={join} onStart={start} />
+        <TurnPanel
+          game={game}
+          myId={myId}
+          myTurn={myTurn}
+          orders={orders}
+          onCancelOrder={cancel}
+          onCancelAll={cancelAll}
+          onEndTurn={endTurn}
+          onReset={reset}
+        />
+        <LogFeed game={game} />
+      </aside>
+    </main>
   )
 }
 

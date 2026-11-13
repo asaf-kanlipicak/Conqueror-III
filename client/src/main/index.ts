@@ -3,6 +3,11 @@ import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 
+const profile = process.env.CONQUEROR_PROFILE
+if (profile) {
+  app.setPath('userData', join(app.getPath('appData'), `conqueror-iii-${profile}`))
+}
+
 function createWindow(): void {
   const mainWindow = new BrowserWindow({
     width: 1920,
