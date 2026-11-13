@@ -1,7 +1,11 @@
 from pydantic import BaseModel
 
 from game.enums import PlayerColor
-from game.models import Tile
+
+
+class Coord(BaseModel):
+    x: int
+    y: int
 
 
 class JoinData(BaseModel):
@@ -9,12 +13,18 @@ class JoinData(BaseModel):
     color: PlayerColor
 
 
-class AttackData(BaseModel):
-    x: int
-    y: int
+class MoveData(BaseModel):
+    source: Coord
+    target: Coord
 
 
-class TileUpdateData(BaseModel):
-    x: int
-    y: int
-    tile: Tile
+class CancelData(BaseModel):
+    source: Coord
+
+
+class ResumeData(BaseModel):
+    player_id: str
+
+
+class ErrorData(BaseModel):
+    message: str

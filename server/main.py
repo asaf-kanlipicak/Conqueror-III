@@ -1,11 +1,15 @@
+import asyncio
 from typing import Dict
 
+import uvicorn
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-import uvicorn
+from pydantic import ValidationError
+
 from connection.manager import Manager
-from game.dispatcher import Dispatcher, ResultType, Result, Command
+from game.dispatcher import Command, Dispatcher, Result, ResultType
 from game.models import Player
+from game.schemas import ErrorData
 
 app = FastAPI()
 
@@ -19,26 +23,37 @@ app.add_middleware(
 
 manager = Manager()
 dispatcher = Dispatcher(manager)
-websocket_player_map: Dict[WebSocket, Player] = {}
+sessions: Dict[WebSocket, str] = {}
+
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
     await manager.connect(websocket)
     try:
-        result = Result(type=ResultType.CONNECT_SUCCESS, data=dispatcher.state.game)
-        await websocket.send_text(result.model_dump_json())
+        game = dispatcher.state.game
+        await websocket.send_text(
+            Result(type=ResultType.CONNECT_SUCCESS, data=game).model_dump_json()
+        )
         while True:
-            data = await websocket.receive_json()
-            command = Command(**data)
-            player = websocket_player_map.get(websocket)
-            result = await dispatcher.dispatch_command(player, command)
-            if result:
-                await websocket.send_text(result.model_dump_json())
-                if result.type == ResultType.JOIN_SUCCESS:
-                    websocket_player_map[websocket] = result.data
+            raw = await websocket.receive_json()
+            try:
+                command = Command(**raw)
+                result = await dispatcher.dispatch_command(sessions.get(websocket), command)
+            except ValidationError:
+                result = Result(
+                    type=ResultType.ERROR, data=ErrorData(message="that command made no sense")
+                )
+            if result is None:
+                continue
+            await websocket.send_text(result.model_dump_json())
+            if isinstance(result.data, Player):
+                sessions[websocket] = result.data.id
     except WebSocketDisconnect:
         manager.disconnect(websocket)
-        websocket_player_map.pop(websocket, None)
+        player_id = sessions.pop(websocket, None)
+        if player_id is not None:
+            asyncio.create_task(dispatcher.player_left(player_id))
+
 
 if __name__ == "__main__":
     uvicorn.run("main:app", host="0.0.0.0", port=8000, reload=True)

@@ -1,8 +1,10 @@
 from enum import StrEnum
 
-class TileType(StrEnum):
-    PLAYER = "player"
-    BOT = "bot"
+
+class TileKind(StrEnum):
+    LAND = "land"
+    WATER = "water"
+
 
 class PlayerColor(StrEnum):
     RED = "red"
@@ -13,8 +15,3 @@ class PlayerColor(StrEnum):
     TURQUOISE = "turquoise"
     PURPLE = "purple"
     WHITE = "white"
-
-class BotColor(StrEnum):
-    GREY = "grey"
-    BLACK = "black"
-

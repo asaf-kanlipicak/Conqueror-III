@@ -1,35 +1,27 @@
-from typing import List
-
 from pydantic import BaseModel, Field
 
-from game.enums import TileType, PlayerColor, BotColor
+from game.enums import PlayerColor, TileKind
 
 
 class Player(BaseModel):
+    id: str
     name: str = Field(..., max_length=20)
     color: PlayerColor
-
-class Players(BaseModel):
-    players: List[Player] = []
+    eliminated: bool = False
+    online: bool = True
 
 
 class Tile(BaseModel):
-    type: TileType
-    color: PlayerColor | BotColor
+    kind: TileKind = TileKind.LAND
+    owner: str | None = None
+    soldiers: int = 0
 
-class BotTile(Tile):
-    type: TileType = TileType.BOT
-    color: BotColor = BotColor.GREY
-
-class PlayerTile(Tile):
-    type: TileType = TileType.PLAYER
-
-class Grid(BaseModel):
-    tiles: List[List[Tile]]
 
 class Game(BaseModel):
-    grid: Grid
-    players: Players
-
-
-
+    tiles: list[list[Tile]]
+    players: list[Player] = []
+    turn: int = 0
+    round: int = 0
+    started: bool = False
+    winner: str | None = None
+    log: list[str] = []
