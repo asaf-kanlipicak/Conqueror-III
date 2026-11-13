@@ -100,6 +100,12 @@ Last player with land tiles wins.
   freeze each source's soldier count when the order is given, or forbid ordering from a tile that is
   also a target in the same turn.
 
+## Next
+
+- **Chat.** One `CHAT {text}` command that appends `name: text` to a capped list on the game state, so
+  it rides the existing updates and needs no new event type. No persistence, no history, cleared on
+  reset.
+
 ## Not in v1
 
 Docks, ships, naval combat, AI opponents, buildings, resources, fog of war, partial transfers,
