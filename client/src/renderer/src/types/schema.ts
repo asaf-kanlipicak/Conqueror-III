@@ -1,93 +1,93 @@
 export enum TileType {
-    PLAYER = 'player',
-    BOT = 'bot'
+  PLAYER = 'player',
+  BOT = 'bot'
 }
 
 export enum PlayerColor {
-    RED = 'red',
-    GREEN = 'green',
-    BLUE = 'blue',
-    YELLOW = 'yellow',
-    ORANGE = 'orange',
-    TURQUOISE = 'turquoise',
-    PURPLE = 'purple',
-    WHITE = 'white'
+  RED = 'red',
+  GREEN = 'green',
+  BLUE = 'blue',
+  YELLOW = 'yellow',
+  ORANGE = 'orange',
+  TURQUOISE = 'turquoise',
+  PURPLE = 'purple',
+  WHITE = 'white'
 }
 
 export enum BotColor {
-    GREY = "grey",
-    BLACK = "black"
+  GREY = 'grey',
+  BLACK = 'black'
 }
 
 export enum CommandType {
-    RESET = 'RESET',
-    JOIN = 'JOIN',
-    ATTACK = 'ATTACK'
+  RESET = 'RESET',
+  JOIN = 'JOIN',
+  ATTACK = 'ATTACK'
 }
 
 export enum EventType {
-    GAME_UPDATE = 'GAME_UPDATE',
-    GRID_UPDATE = 'GRID_UPDATE',
-    PLAYERS_UPDATE = 'PLAYERS_UPDATE',
-    TILE_UPDATE = 'TILE_UPDATE'
+  GAME_UPDATE = 'GAME_UPDATE',
+  GRID_UPDATE = 'GRID_UPDATE',
+  PLAYERS_UPDATE = 'PLAYERS_UPDATE',
+  TILE_UPDATE = 'TILE_UPDATE'
 }
 
 export enum ResultType {
-    CONNECT_SUCCESS = 'CONNECT_SUCCESS',
-    JOIN_SUCCESS = 'JOIN_SUCCESS'
+  CONNECT_SUCCESS = 'CONNECT_SUCCESS',
+  JOIN_SUCCESS = 'JOIN_SUCCESS'
 }
 
 export interface Player {
-    name: string
-    color: PlayerColor
+  name: string
+  color: PlayerColor
 }
 
 export interface Players {
-    players: Player[]
+  players: Player[]
 }
 
 export interface Tile {
-    type: TileType
-    color: PlayerColor | BotColor
+  type: TileType
+  color: PlayerColor | BotColor
 }
 
 export interface Grid {
-    tiles: Tile[][]
+  tiles: Tile[][]
 }
 
 export interface Game {
-    grid: Grid
-    players: Players
+  grid: Grid
+  players: Players
 }
 
 export interface JoinData {
-    name: string
-    color: PlayerColor
+  name: string
+  color: PlayerColor
 }
 
 export interface AttackData {
-    x: number
-    y: number
+  x: number
+  y: number
 }
 
 // Helper types for WebSocket messages
 export interface Command {
-    type: CommandType
-    data?: JoinData | AttackData
+  type: CommandType
+  data?: JoinData | AttackData
 }
 
 export interface Event {
-    type: EventType
-    data: any // Dynamic based on type
+  type: EventType
+  data: unknown // Dynamic based on type
 }
 
 export interface Result {
-    type: ResultType
-    data: any // Dynamic based on type
+  type: ResultType
+  data: unknown // Dynamic based on type
 }
 
 export interface TileUpdateData {
-    x: number
-    y: number
-    tile: Tile
+  x: number
+  y: number
+  tile: Tile
 }
