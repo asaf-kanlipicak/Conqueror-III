@@ -9,6 +9,7 @@ import {
   orderCount,
   playerTotals,
   sameCoord,
+  shownOrders,
   tileCenter
 } from './board'
 import { Game, PendingOrder, PlayerColor, TileKind, Tile } from '../types/schema'
@@ -123,6 +124,27 @@ describe('order counts', () => {
   it('shows the live garrison for a standing order', () => {
     expect(orderCount(sample(), order(true, 0))).toBe(5)
     expect(orderCount(sample(), order(true, 9))).toBe(5)
+  })
+})
+
+describe('order filter', () => {
+  const oneShot: PendingOrder = {
+    player: 'a',
+    source: { x: 0, y: 0 },
+    target: { x: 1, y: 0 },
+    soldiers: 5,
+    repeat: false
+  }
+  const standing: PendingOrder = { ...oneShot, source: { x: 2, y: 0 }, repeat: true }
+
+  it('leaves the list alone until asked to hide', () => {
+    expect(shownOrders([oneShot, standing], false)).toEqual([oneShot, standing])
+    expect(shownOrders([], false)).toEqual([])
+  })
+
+  it('drops the standing orders when hiding', () => {
+    expect(shownOrders([oneShot, standing], true)).toEqual([oneShot])
+    expect(shownOrders([standing], true)).toEqual([])
   })
 })
 

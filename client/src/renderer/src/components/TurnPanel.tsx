@@ -9,22 +9,11 @@ interface TurnPanelProps {
   orders: PendingOrder[]
   onOrder: (source: Coord, target: Coord, repeat: boolean) => void
   onCancelOrder: (source: Coord) => void
-  onCancelAll: () => void
   onEndTurn: () => void
   onReset: () => void
 }
 
-export function TurnPanel({
-  game,
-  myId,
-  myTurn,
-  orders,
-  onOrder,
-  onCancelOrder,
-  onCancelAll,
-  onEndTurn,
-  onReset
-}: TurnPanelProps) {
+export function TurnPanel({ game, myId, myTurn, orders, onOrder, onCancelOrder, onEndTurn, onReset }: TurnPanelProps) {
   const [confirming, setConfirming] = useState(false)
 
   useEffect(() => {
@@ -57,14 +46,7 @@ export function TurnPanel({
       {!winner && me && !me.eliminated && (
         <>
           <p className="turn-line">{myTurn ? 'your move' : `waiting for ${active?.name ?? '…'}`}</p>
-          <OrderList
-            game={game}
-            myId={myId}
-            orders={orders}
-            onOrder={onOrder}
-            onCancel={onCancelOrder}
-            onCancelAll={onCancelAll}
-          />
+          <OrderList game={game} myId={myId} orders={orders} onOrder={onOrder} onCancel={onCancelOrder} />
           <button className="btn" disabled={!myTurn} onClick={onEndTurn}>
             {!myTurn
               ? 'waiting for your turn'

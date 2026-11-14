@@ -30,7 +30,6 @@ export interface GameSession {
   reset: () => void
   order: (source: Coord, target: Coord, repeat?: boolean) => void
   cancel: (source: Coord) => void
-  cancelAll: () => void
   chat: (text: string) => void
   endTurn: () => void
 }
@@ -158,9 +157,6 @@ export function useGame(): GameSession {
     [send]
   )
   const cancel = useCallback((source: Coord) => send(CommandType.CANCEL, { source }), [send])
-  const cancelAll = useCallback(() => {
-    for (const move of orders) send(CommandType.CANCEL, { source: move.source })
-  }, [orders, send])
   const chat = useCallback((text: string) => send(CommandType.CHAT, { text }), [send])
   const endTurn = useCallback(() => send(CommandType.END_TURN), [send])
 
@@ -177,7 +173,6 @@ export function useGame(): GameSession {
     reset,
     order,
     cancel,
-    cancelAll,
     chat,
     endTurn
   }

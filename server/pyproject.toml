@@ -1,6 +1,6 @@
 [project]
 name = "conqueror-iii-server"
-version = "0.3.0"
+version = "0.3.1"
 description = "Conqueror III Server"
 requires-python = ">=3.14, <3.15"
 dependencies = [

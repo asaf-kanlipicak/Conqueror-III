@@ -31,6 +31,10 @@ export function orderCount(game: Game, order: PendingOrder): number {
   return order.repeat ? source.soldiers : Math.min(order.soldiers, source.soldiers)
 }
 
+export function shownOrders(orders: PendingOrder[], hideStanding: boolean): PendingOrder[] {
+  return hideStanding ? orders.filter((order) => !order.repeat) : orders
+}
+
 export function playerTotals(game: Game, playerId: string): Totals {
   let tiles = 0
   let soldiers = 0

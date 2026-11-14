@@ -8,8 +8,7 @@ import { TurnPanel } from './components/TurnPanel'
 import { useGame } from './hooks/useGame'
 
 function App() {
-  const { game, myId, me, myTurn, orders, error, status, join, start, reset, order, cancel, cancelAll, chat, endTurn } =
-    useGame()
+  const { game, myId, me, myTurn, orders, error, status, join, start, reset, order, cancel, chat, endTurn } = useGame()
 
   if (!game) {
     return (
@@ -48,7 +47,6 @@ function App() {
           orders={orders}
           onOrder={order}
           onCancelOrder={cancel}
-          onCancelAll={cancelAll}
           onEndTurn={endTurn}
           onReset={reset}
         />

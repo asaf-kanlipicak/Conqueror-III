@@ -78,7 +78,7 @@ export function Board({ game, myId, onOrder, onCancel }: BoardProps) {
   const orderTip = (order: PendingOrder): string => {
     const target = tileAt(order.target)
     const count = orderCount(game, order)
-    const mark = order.repeat ? '↻ ' : ''
+    const mark = order.repeat ? '● ' : ''
     if (target.owner === order.player) return `${mark}${count} join ${target.soldiers}`
     if (target.soldiers === 0) return `${mark}walk in with ${count}`
     return `${mark}${count} vs ${target.soldiers} · ${Math.round(odds(count, target.soldiers) * 100)}%`

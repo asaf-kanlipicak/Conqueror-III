@@ -286,6 +286,8 @@ input {
   overflow-y: auto;
   border-left: 1px solid var(--ink);
   background: var(--paper-deep);
+  scrollbar-width: thin;
+  scrollbar-color: var(--rule) transparent;
 }
 
 .section {
@@ -496,10 +498,27 @@ input {
   color: var(--ink);
 }
 
+.order-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 10px;
+}
+
+.order-head .count {
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
 .order-list {
+  max-height: 232px;
   margin: 0 0 12px;
-  padding: 0;
+  padding: 0 6px 0 0;
   list-style: none;
+  overflow-y: auto;
 }
 
 .order-list li {
@@ -514,18 +533,18 @@ input {
 }
 
 .hold {
+  display: flex;
+  align-items: center;
   padding: 0;
   border: 0;
   background: none;
-  color: var(--rule);
-  font-family: var(--font-sans);
-  font-size: 15px;
+  color: var(--ink-soft);
   line-height: 1;
   cursor: pointer;
 }
 
 .hold:hover {
-  color: var(--ink-soft);
+  color: var(--ink);
 }
 
 .hold.on {
@@ -624,9 +643,11 @@ input {
 .chat {
   max-height: 150px;
   margin: 0 0 12px;
-  padding: 0;
+  padding: 0 6px 0 0;
   list-style: none;
   overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--rule) transparent;
   font-size: 14px;
   line-height: 1.45;
 }
@@ -689,10 +710,12 @@ input {
 .log {
   flex: 1;
   margin: 0;
-  padding: 0 0 0 12px;
+  padding: 0 6px 0 12px;
   border-left: 1px solid var(--rule);
   list-style: none;
   overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: var(--rule) transparent;
   font-size: 14px;
   line-height: 1.6;
   color: var(--ink-soft);
