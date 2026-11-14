@@ -1,4 +1,5 @@
 import { Board } from './components/Board'
+import { Chat } from './components/Chat'
 import { Lobby } from './components/Lobby'
 import { LogFeed } from './components/LogFeed'
 import { Roster } from './components/Roster'
@@ -6,7 +7,8 @@ import { TurnPanel } from './components/TurnPanel'
 import { useGame } from './hooks/useGame'
 
 function App() {
-  const { game, myId, myTurn, orders, error, status, join, start, reset, order, cancel, cancelAll, endTurn } = useGame()
+  const { game, myId, me, myTurn, orders, error, status, join, start, reset, order, cancel, cancelAll, chat, endTurn } =
+    useGame()
 
   if (!game) {
     return (
@@ -45,6 +47,7 @@ function App() {
           onEndTurn={endTurn}
           onReset={reset}
         />
+        <Chat game={game} me={me} onChat={chat} />
         <LogFeed game={game} />
       </aside>
     </main>

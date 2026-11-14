@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { boardSpan, isAdjacent, isAttack, odds, playerTotals, sameCoord, tileCenter } from './board'
+import { boardSpan, isAdjacent, isAttack, odds, orderArrow, playerTotals, sameCoord, tileCenter } from './board'
 import { Game, PlayerColor, TileKind, Tile } from '../types/schema'
 
 function tile(owner: string | null, soldiers: number, kind: TileKind = TileKind.LAND): Tile {
@@ -20,7 +20,8 @@ function sample(): Game {
     round: 1,
     started: true,
     winner: null,
-    log: []
+    log: [],
+    chat: []
   }
 }
 
@@ -73,5 +74,18 @@ describe('geometry', () => {
   it('sizes the board from its side', () => {
     expect(boardSpan(2)).toBe(85)
     expect(boardSpan(20)).toBe(859)
+  })
+
+  it('points an arrow from the source towards the target', () => {
+    const arrow = orderArrow({ x: 0, y: 0 }, { x: 1, y: 0 })
+    expect(arrow.y1).toBe(21)
+    expect(arrow.y2).toBe(21)
+    expect(arrow.x1).toBeGreaterThan(21)
+    expect(arrow.x2).toBeGreaterThan(arrow.x1)
+    expect(arrow.x2).toBeLessThan(64)
+
+    const down = orderArrow({ x: 3, y: 3 }, { x: 3, y: 4 })
+    expect(down.x1).toBe(down.x2)
+    expect(down.y2).toBeGreaterThan(down.y1)
   })
 })

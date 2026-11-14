@@ -59,3 +59,10 @@ def test_join_start_move_and_end_turn(client):
         alice.send_json({"type": "END_TURN"})
         game = wait_game(alice, lambda state: state["turn"] == 1)
         assert game["players"][1]["name"] == "bob"
+
+        bob.send_json({"type": "CHAT", "data": {"text": "good luck"}})
+        game = wait_game(alice, lambda state: state["chat"])
+        assert game["chat"] == [{"name": "bob", "text": "good luck"}]
+
+        bob.send_json({"type": "CHAT", "data": {"text": "   "}})
+        assert "say something" in receive_until(bob, "ERROR")["data"]["message"]

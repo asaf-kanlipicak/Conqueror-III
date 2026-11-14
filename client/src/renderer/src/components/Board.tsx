@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react'
 import { Coord, Game, Move, Tile, TileKind } from '../types/schema'
 import { INK, NEUTRAL_FILL, PALETTE, WATER_FILL } from '../utils/palette'
-import { boardSpan, isAdjacent, isAttack, odds, sameCoord, tileCenter, TILE_SIZE } from '../lib/board'
+import { boardSpan, isAdjacent, isAttack, odds, orderArrow, sameCoord, TILE_SIZE } from '../lib/board'
 
 interface BoardProps {
   game: Game
@@ -99,16 +99,41 @@ export function Board({ game, myId, orders, onOrder, onCancel }: BoardProps) {
         </div>
 
         <svg className="orders" width={span} height={span} aria-hidden="true">
+          <defs>
+            <marker
+              id="arrow-attack"
+              viewBox="0 0 12 12"
+              refX="10"
+              refY="6"
+              markerWidth="12"
+              markerHeight="12"
+              markerUnits="userSpaceOnUse"
+              orient="auto"
+            >
+              <path d="M0.5,1 L11,6 L0.5,11 z" className="head-attack" />
+            </marker>
+            <marker
+              id="arrow-move"
+              viewBox="0 0 12 12"
+              refX="10"
+              refY="6"
+              markerWidth="12"
+              markerHeight="12"
+              markerUnits="userSpaceOnUse"
+              orient="auto"
+            >
+              <path d="M0.5,1 L11,6 L0.5,11 z" className="head-move" />
+            </marker>
+          </defs>
           {orders.map((move) => {
             const attack = isAttack(game, move, myId)
+            const arrow = orderArrow(move.source, move.target)
+            const head = attack ? 'url(#arrow-attack)' : 'url(#arrow-move)'
             return (
-              <circle
-                key={`${move.source.x}:${move.source.y}`}
-                cx={tileCenter(move.target).x + TILE_SIZE / 2 - 6}
-                cy={tileCenter(move.target).y - TILE_SIZE / 2 + 6}
-                r="4.5"
-                className={attack ? 'pin-attack' : 'pin-move'}
-              />
+              <g key={`${move.source.x}:${move.source.y}`}>
+                <line {...arrow} className="arrow-casing" />
+                <line {...arrow} markerEnd={head} className={attack ? 'arrow-attack' : 'arrow-move'} />
+              </g>
             )
           })}
         </svg>

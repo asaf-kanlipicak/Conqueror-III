@@ -46,3 +46,23 @@ export function tileCenter(coord: Coord): { x: number; y: number } {
   const step = TILE_SIZE + TILE_GAP
   return { x: coord.x * step + TILE_SIZE / 2, y: coord.y * step + TILE_SIZE / 2 }
 }
+
+export interface Arrow {
+  x1: number
+  y1: number
+  x2: number
+  y2: number
+}
+
+export function orderArrow(from: Coord, to: Coord): Arrow {
+  const start = tileCenter(from)
+  const end = tileCenter(to)
+  const dx = end.x - start.x
+  const dy = end.y - start.y
+  return {
+    x1: start.x + dx * 0.28,
+    y1: start.y + dy * 0.28,
+    x2: start.x + dx * 0.65,
+    y2: start.y + dy * 0.65
+  }
+}

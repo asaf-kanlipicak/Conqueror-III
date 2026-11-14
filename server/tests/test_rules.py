@@ -2,7 +2,7 @@ import random
 
 import pytest
 
-from game.constants import CAPITAL_GARRISON, LOOT, PRODUCTION
+from game.constants import CAPITAL_GARRISON, CHAT_LIMIT, CHAT_MAX, LOOT, PRODUCTION
 from game.enums import PlayerColor, TileKind
 from game.schemas import Coord
 from game.state import State, StateError
@@ -233,3 +233,69 @@ def test_elimination_clears_water_and_names_a_winner(game, monkeypatch):
     assert state.game.winner == bob.id
     assert water.owner is None
     assert water.soldiers == 0
+
+
+def test_a_stack_cannot_ride_through_the_queue(game):
+    state, alice, _ = game
+    behind = state.tile(Coord(x=0, y=0))
+    middle = state.tile(Coord(x=1, y=0))
+    ahead = state.tile(Coord(x=2, y=0))
+    behind.soldiers = 10
+    middle.owner = alice.id
+    middle.soldiers = 5
+    ahead.owner = None
+    ahead.soldiers = 0
+
+    order(state, alice, (0, 0), (1, 0))
+    order(state, alice, (1, 0), (2, 0))
+    state.end_turn(alice.id)
+
+    assert ahead.owner == alice.id
+    assert ahead.soldiers == 5
+    assert middle.soldiers == 10
+    assert behind.soldiers == 0
+
+
+def test_a_reinforced_tile_attacks_with_its_own_count(game, monkeypatch):
+    state, alice, bob = game
+    monkeypatch.setattr(random, "random", lambda: 0.0)
+    behind = state.tile(Coord(x=0, y=0))
+    middle = state.tile(Coord(x=1, y=0))
+    target = state.tile(Coord(x=2, y=0))
+    behind.soldiers = 10
+    middle.owner = alice.id
+    middle.soldiers = 5
+    target.owner = bob.id
+    target.soldiers = 3
+
+    order(state, alice, (0, 0), (1, 0))
+    order(state, alice, (1, 0), (2, 0))
+    state.end_turn(alice.id)
+
+    assert target.owner == alice.id
+    assert target.soldiers == 5
+    assert middle.soldiers == 10
+
+
+def test_chat_keeps_a_capped_history(game):
+    state, alice, bob = game
+    state.chat(alice.id, "  hello   there  ")
+    state.chat(bob.id, "hi")
+    assert [(line.name, line.text) for line in state.game.chat] == [
+        ("alice", "hello there"),
+        ("bob", "hi"),
+    ]
+    for index in range(CHAT_LIMIT + 10):
+        state.chat(alice.id, f"line {index}")
+    assert len(state.game.chat) == CHAT_LIMIT
+    assert state.game.chat[-1].text == f"line {CHAT_LIMIT + 9}"
+
+
+def test_chat_rejects_empty_and_truncates_long(game):
+    state, alice, _ = game
+    with pytest.raises(StateError, match="say something"):
+        state.chat(alice.id, "   \n  ")
+    with pytest.raises(StateError, match="not in this game"):
+        state.chat("nobody", "hello")
+    state.chat(alice.id, "x" * (CHAT_MAX + 50))
+    assert len(state.game.chat[-1].text) == CHAT_MAX

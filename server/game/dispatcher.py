@@ -5,7 +5,7 @@ from pydantic import BaseModel, SerializeAsAny
 
 from connection.manager import Manager
 from game.constants import RECONNECT_GRACE
-from game.schemas import CancelData, ErrorData, JoinData, MoveData, ResumeData
+from game.schemas import CancelData, ChatData, ErrorData, JoinData, MoveData, ResumeData
 from game.state import State, StateError
 
 
@@ -15,6 +15,7 @@ class CommandType(StrEnum):
     START = "START"
     MOVE = "MOVE"
     CANCEL = "CANCEL"
+    CHAT = "CHAT"
     END_TURN = "END_TURN"
     RESET = "RESET"
 
@@ -33,7 +34,7 @@ class ResultType(StrEnum):
 
 class Command(BaseModel):
     type: CommandType
-    data: JoinData | MoveData | CancelData | ResumeData | None = None
+    data: JoinData | MoveData | CancelData | ResumeData | ChatData | None = None
 
 
 class Event(BaseModel):
@@ -56,6 +57,7 @@ class Dispatcher:
             CommandType.START: self.dispatch_start,
             CommandType.MOVE: self.dispatch_move,
             CommandType.CANCEL: self.dispatch_cancel,
+            CommandType.CHAT: self.dispatch_chat,
             CommandType.END_TURN: self.dispatch_end_turn,
             CommandType.RESET: self.dispatch_reset,
         }
@@ -97,6 +99,12 @@ class Dispatcher:
             raise StateError("a source is required")
         self.state.remove_order(self._require_player(player_id), command.data.source)
         return Result(type=ResultType.ORDER_CANCELLED, data=command.data)
+
+    async def dispatch_chat(self, player_id: str | None, command: Command) -> None:
+        if not isinstance(command.data, ChatData):
+            raise StateError("a message is required")
+        self.state.chat(self._require_player(player_id), command.data.text)
+        await self._broadcast_game()
 
     async def dispatch_end_turn(self, player_id: str | None, _: Command) -> None:
         self.state.end_turn(self._require_player(player_id))

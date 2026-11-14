@@ -26,5 +26,9 @@ class ResumeData(BaseModel):
     player_id: str
 
 
+class ChatData(BaseModel):
+    text: str
+
+
 class ErrorData(BaseModel):
     message: str

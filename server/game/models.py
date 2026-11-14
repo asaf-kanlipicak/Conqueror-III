@@ -17,6 +17,11 @@ class Tile(BaseModel):
     soldiers: int = 0
 
 
+class ChatLine(BaseModel):
+    name: str
+    text: str
+
+
 class Game(BaseModel):
     tiles: list[list[Tile]]
     players: list[Player] = []
@@ -25,3 +30,4 @@ class Game(BaseModel):
     started: bool = False
     winner: str | None = None
     log: list[str] = []
+    chat: list[ChatLine] = []

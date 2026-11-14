@@ -6,6 +6,8 @@ from math import ceil
 from game.constants import (
     BOARD_SIZE,
     CAPITAL_GARRISON,
+    CHAT_LIMIT,
+    CHAT_MAX,
     LOG_LIMIT,
     LOOT,
     NEUTRAL_GARRISONS,
@@ -15,7 +17,7 @@ from game.constants import (
     SEATS,
 )
 from game.enums import PlayerColor, TileKind
-from game.models import Game, Player, Tile
+from game.models import ChatLine, Game, Player, Tile
 from game.schemas import Coord
 
 
@@ -27,6 +29,7 @@ class StateError(Exception):
 class Order:
     source: Coord
     target: Coord
+    soldiers: int
 
 
 def _is_water(x: int, y: int) -> bool:
@@ -135,7 +138,8 @@ class State:
         self.game.round = 1
         self._log(f"the game is on with {len(self.game.players)} players")
         self._produce()
-        if not self.current.online:
+        current = self.current
+        if current is not None and not current.online:
             self._next_turn()
 
     def add_order(self, player_id: str, source: Coord, target: Coord) -> None:
@@ -149,7 +153,7 @@ class State:
             raise StateError("those tiles are not adjacent")
         if any(order.source == source for order in self.orders):
             raise StateError("that tile already has an order")
-        self.orders.append(Order(source=source, target=target))
+        self.orders.append(Order(source=source, target=target, soldiers=tile.soldiers))
 
     def remove_order(self, player_id: str, source: Coord) -> None:
         self._require_turn(player_id)
@@ -158,6 +162,14 @@ class State:
                 self.orders.remove(order)
                 return
         raise StateError("that tile has no order")
+
+    def chat(self, player_id: str, text: str) -> None:
+        player = self.player(player_id)
+        text = " ".join(text.split())[:CHAT_MAX]
+        if not text:
+            raise StateError("say something first")
+        self.game.chat.append(ChatLine(name=player.name, text=text))
+        del self.game.chat[:-CHAT_LIMIT]
 
     def end_turn(self, player_id: str) -> None:
         player = self._require_turn(player_id)
@@ -179,32 +191,32 @@ class State:
     def _resolve(self, player: Player, order: Order) -> None:
         source = self.tile(order.source)
         target = self.tile(order.target)
-        if source.owner != player.id or source.soldiers == 0:
+        count = min(order.soldiers, source.soldiers)
+        if source.owner != player.id or count == 0:
             self._log(f"{player.name}: nothing left at {_label(order.source)}")
             return
         if target.owner == player.id:
-            count = source.soldiers
             target.soldiers += count
-            source.soldiers = 0
+            source.soldiers -= count
             self._log(f"{player.name} moved {count} to {_label(order.target)}")
             return
         if target.soldiers == 0:
-            count = source.soldiers
             target.owner = player.id
             target.soldiers = count
-            source.soldiers = 0
+            source.soldiers -= count
             self._log(f"{player.name} walked into {_label(order.target)} with {count}")
             return
-        self._battle(player, source, target, _label(order.target))
+        self._battle(player, source, target, count, _label(order.target))
 
-    def _battle(self, player: Player, source: Tile, target: Tile, where: str) -> None:
-        attacker, defender = source.soldiers, target.soldiers
-        if random.random() < attacker / (attacker + defender):
-            survivors = max(attacker - attacker * defender // (2 * (attacker + defender)), 1)
+    def _battle(self, player: Player, source: Tile, target: Tile, attacker: int, where: str) -> None:
+        defender = target.soldiers
+        total = attacker + defender
+        if random.random() < attacker / total:
+            survivors = max(attacker - attacker * defender // (2 * total), 1)
             remaining = defender - min(attacker, defender)
             if remaining:
                 target.soldiers = remaining
-                source.soldiers = survivors
+                source.soldiers -= attacker - survivors
                 self._log(
                     f"{player.name} attacked {where} {attacker} vs {defender}: won the exchange, "
                     f"{remaining} defenders hold, attacker down to {survivors}"
@@ -213,12 +225,12 @@ class State:
             loot = LOOT if target.kind == TileKind.LAND and target.owner is None else 0
             target.owner = player.id
             target.soldiers = survivors + loot
-            source.soldiers = 0
+            source.soldiers -= attacker
             line = f"{player.name} took {where} {attacker} vs {defender}: {survivors} soldiers"
             self._log(line + (f" and looted {loot}" if loot else ""))
             return
-        source.soldiers = attacker - ceil(attacker * defender / (attacker + defender))
-        target.soldiers = defender - attacker * defender // (2 * (attacker + defender))
+        source.soldiers -= ceil(attacker * defender / total)
+        target.soldiers = defender - attacker * defender // (2 * total)
         self._log(
             f"{player.name} attacked {where} {attacker} vs {defender}: repelled, "
             f"attacker down to {source.soldiers}, defenders down to {target.soldiers}"

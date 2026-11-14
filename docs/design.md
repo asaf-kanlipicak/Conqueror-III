@@ -39,9 +39,11 @@ A tile with 0 soldiers is empty: walking into it needs no roll and costs nothing
    - target is yours → **transfer** all soldiers there
    - target is neutral, enemy, or occupied water → **attack** it with all soldiers
 2. A tile gives at most one order per turn. Several tiles may attack the same target.
-3. End Turn: orders resolve one by one in the order you issued them, each rolling when it resolves.
+3. An order carries the soldiers the tile held when you gave it, so reinforcing a tile and ordering
+   from it in the same turn sends only the original garrison onwards.
+4. End Turn: orders resolve one by one in the order you issued them, each rolling when it resolves.
    If a tile has become yours by the time a later order resolves, that order is just a transfer.
-4. Production happens at the start of every round, for all players at once — including one round
+5. Production happens at the start of every round, for all players at once — including one round
    before the first turn. Turn order is join order.
 
 Because a tile acts once per turn, a stack moves at most one tile per turn.
@@ -76,6 +78,10 @@ You win with probability `a / (a + b)`.
 
 - The server keeps a rolling log of the last 60 events — joins, battles, skipped turns,
   eliminations, the winner — and sends it with every update, so the UI can show a feed.
+- Chat is a second capped list on the same update: who said what, last 50 lines, gone on reset.
+  Anything not committed to an order is just talk.
+- Your own turn is announced with a short chime. It rings on the change of turn only, so a reload
+  does not set it off.
 
 ## Winning
 
@@ -92,19 +98,6 @@ Last player with land tiles wins.
 | capital garrison         | 200        |
 | neutral garrison         | 0, 50–150  |
 | players                  | 2–4        |
-
-## Known issue (to fix)
-
-- Chained transfers: give a row of your tiles one order each and resolution carries the same stack
-  from tile to tile in a single turn, so the last tile attacks with the whole column. Fix direction:
-  freeze each source's soldier count when the order is given, or forbid ordering from a tile that is
-  also a target in the same turn.
-
-## Next
-
-- **Chat.** One `CHAT {text}` command that appends `name: text` to a capped list on the game state, so
-  it rides the existing updates and needs no new event type. No persistence, no history, cleared on
-  reset.
 
 ## Not in v1
 

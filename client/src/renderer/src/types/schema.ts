@@ -20,6 +20,7 @@ export enum CommandType {
   START = 'START',
   MOVE = 'MOVE',
   CANCEL = 'CANCEL',
+  CHAT = 'CHAT',
   END_TURN = 'END_TURN',
   RESET = 'RESET'
 }
@@ -52,6 +53,11 @@ export interface Player {
   online: boolean
 }
 
+export interface ChatLine {
+  name: string
+  text: string
+}
+
 export interface Game {
   tiles: Tile[][]
   players: Player[]
@@ -60,6 +66,7 @@ export interface Game {
   started: boolean
   winner: string | null
   log: string[]
+  chat: ChatLine[]
 }
 
 export interface Move {

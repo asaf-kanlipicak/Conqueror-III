@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { API_BASE_URL } from '../config'
+import { playChime, shouldChime } from '../lib/chime'
 import {
   CommandType,
   Coord,
@@ -30,6 +31,7 @@ export interface GameSession {
   order: (source: Coord, target: Coord) => void
   cancel: (source: Coord) => void
   cancelAll: () => void
+  chat: (text: string) => void
   endTurn: () => void
 }
 
@@ -142,6 +144,12 @@ export function useGame(): GameSession {
   const me = game && myIndex >= 0 ? game.players[myIndex] : null
   const myTurn = Boolean(game?.started && !game?.winner && myIndex >= 0 && myIndex === game?.turn)
 
+  const wasMyTurn = useRef<boolean | null>(null)
+  useEffect(() => {
+    if (shouldChime(wasMyTurn.current, myTurn)) playChime()
+    wasMyTurn.current = myTurn
+  }, [myTurn])
+
   const join = useCallback((name: string, color: PlayerColor) => send(CommandType.JOIN, { name, color }), [send])
   const start = useCallback(() => send(CommandType.START), [send])
   const reset = useCallback(() => send(CommandType.RESET), [send])
@@ -150,6 +158,7 @@ export function useGame(): GameSession {
   const cancelAll = useCallback(() => {
     for (const move of orders) send(CommandType.CANCEL, { source: move.source })
   }, [orders, send])
+  const chat = useCallback((text: string) => send(CommandType.CHAT, { text }), [send])
   const endTurn = useCallback(() => {
     setOrders([])
     send(CommandType.END_TURN)
@@ -169,6 +178,7 @@ export function useGame(): GameSession {
     order,
     cancel,
     cancelAll,
+    chat,
     endTurn
   }
 }
