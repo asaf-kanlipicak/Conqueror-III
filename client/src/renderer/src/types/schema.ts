@@ -28,8 +28,6 @@ export enum CommandType {
 export enum MessageType {
   CONNECT_SUCCESS = 'CONNECT_SUCCESS',
   JOIN_SUCCESS = 'JOIN_SUCCESS',
-  ORDER_ACCEPTED = 'ORDER_ACCEPTED',
-  ORDER_CANCELLED = 'ORDER_CANCELLED',
   ERROR = 'ERROR',
   GAME_UPDATE = 'GAME_UPDATE'
 }
@@ -53,25 +51,35 @@ export interface Player {
   online: boolean
 }
 
-export interface ChatLine {
-  name: string
-  text: string
-}
-
-export interface Game {
-  tiles: Tile[][]
-  players: Player[]
-  turn: number
-  round: number
-  started: boolean
-  winner: string | null
-  log: string[]
-  chat: ChatLine[]
-}
-
 export interface Move {
   source: Coord
   target: Coord
+}
+
+export interface PendingOrder extends Move {
+  player: string
+  soldiers: number
+  repeat: boolean
+}
+
+export interface ChatLine {
+  name: string
+  text: string
+  at: number
+}
+
+export interface Game {
+  size: number
+  tiles: Tile[][]
+  players: Player[]
+  orders: PendingOrder[]
+  turn: number
+  round: number
+  started: boolean
+  started_at: number | null
+  winner: string | null
+  log: string[]
+  chat: ChatLine[]
 }
 
 export interface GameMessage {

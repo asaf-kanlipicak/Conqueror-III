@@ -15,7 +15,7 @@ export function LogFeed({ game }: LogFeedProps) {
 
   return (
     <section className="section log-section">
-      <h2 className="label">dispatches</h2>
+      <h2 className="label">field notes</h2>
       {game.log.length === 0 && <p className="muted">nothing to report yet</p>}
       <ol className="log" ref={list}>
         {game.log.map((line, index) => (

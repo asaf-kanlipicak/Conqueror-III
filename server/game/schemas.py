@@ -1,11 +1,8 @@
 from pydantic import BaseModel
 
+from game.constants import BOARD_SIZE
 from game.enums import PlayerColor
-
-
-class Coord(BaseModel):
-    x: int
-    y: int
+from game.models import Coord
 
 
 class JoinData(BaseModel):
@@ -13,9 +10,14 @@ class JoinData(BaseModel):
     color: PlayerColor
 
 
+class StartData(BaseModel):
+    size: int = BOARD_SIZE
+
+
 class MoveData(BaseModel):
     source: Coord
     target: Coord
+    repeat: bool | None = None
 
 
 class CancelData(BaseModel):

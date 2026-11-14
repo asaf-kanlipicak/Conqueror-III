@@ -1,5 +1,6 @@
 import { Board } from './components/Board'
 import { Chat } from './components/Chat'
+import { Elapsed } from './components/Elapsed'
 import { Lobby } from './components/Lobby'
 import { LogFeed } from './components/LogFeed'
 import { Roster } from './components/Roster'
@@ -24,10 +25,13 @@ function App() {
         <div className="sheet">
           <header className="masthead">
             <h1>Conqueror III</h1>
-            <span className="label">{game.started ? `round ${game.round}` : 'lobby'}</span>
+            <div className="stamp-line">
+              {game.started_at !== null && <Elapsed startedAt={game.started_at} />}
+              <span className="label">{game.started ? `round ${game.round}` : 'lobby'}</span>
+            </div>
           </header>
 
-          <Board game={game} myId={myId} orders={orders} onOrder={order} onCancel={cancel} />
+          <Board key={game.started_at ?? 'lobby'} game={game} myId={myId} onOrder={order} onCancel={cancel} />
 
           {error && <p className="notice">{error}</p>}
           {status !== 'live' && <p className="notice">connection lost, coming back…</p>}
@@ -42,6 +46,7 @@ function App() {
           myId={myId}
           myTurn={myTurn}
           orders={orders}
+          onOrder={order}
           onCancelOrder={cancel}
           onCancelAll={cancelAll}
           onEndTurn={endTurn}

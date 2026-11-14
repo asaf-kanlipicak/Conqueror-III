@@ -17,7 +17,7 @@ export function Roster({ game, myId }: RosterProps) {
           <span />
           <span>name</span>
           <span>land</span>
-          <span>men</span>
+          <span>soldiers</span>
         </div>
       )}
       <ul className="roster">
@@ -31,7 +31,7 @@ export function Roster({ game, myId }: RosterProps) {
               <span className="who">
                 {player.name}
                 {player.id === myId && <span className="tag">you</span>}
-                {!player.online && <span className="tag">away</span>}
+                <span className={`dot${player.online ? ' live' : ''}`} title={player.online ? 'online' : 'away'} />
               </span>
               <span className="figure">{totals.tiles}</span>
               <span className="figure">{totals.soldiers}</span>

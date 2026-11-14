@@ -5,7 +5,15 @@ from pydantic import BaseModel, SerializeAsAny
 
 from connection.manager import Manager
 from game.constants import RECONNECT_GRACE
-from game.schemas import CancelData, ChatData, ErrorData, JoinData, MoveData, ResumeData
+from game.schemas import (
+    CancelData,
+    ChatData,
+    ErrorData,
+    JoinData,
+    MoveData,
+    ResumeData,
+    StartData,
+)
 from game.state import State, StateError
 
 
@@ -27,14 +35,12 @@ class EventType(StrEnum):
 class ResultType(StrEnum):
     CONNECT_SUCCESS = "CONNECT_SUCCESS"
     JOIN_SUCCESS = "JOIN_SUCCESS"
-    ORDER_ACCEPTED = "ORDER_ACCEPTED"
-    ORDER_CANCELLED = "ORDER_CANCELLED"
     ERROR = "ERROR"
 
 
 class Command(BaseModel):
     type: CommandType
-    data: JoinData | MoveData | CancelData | ResumeData | ChatData | None = None
+    data: JoinData | MoveData | CancelData | ResumeData | ChatData | StartData | None = None
 
 
 class Event(BaseModel):
@@ -82,23 +88,27 @@ class Dispatcher:
         await self._broadcast_game()
         return Result(type=ResultType.JOIN_SUCCESS, data=player)
 
-    async def dispatch_start(self, player_id: str | None, _: Command) -> None:
-        self.state.start(self._require_player(player_id))
+    async def dispatch_start(self, player_id: str | None, command: Command) -> None:
+        data = command.data if isinstance(command.data, StartData) else StartData()
+        self.state.start(self._require_player(player_id), data.size)
         await self._broadcast_game()
 
-    async def dispatch_move(self, player_id: str | None, command: Command) -> Result:
+    async def dispatch_move(self, player_id: str | None, command: Command) -> None:
         if not isinstance(command.data, MoveData):
             raise StateError("a source and a target are required")
         self.state.add_order(
-            self._require_player(player_id), command.data.source, command.data.target
+            self._require_player(player_id),
+            command.data.source,
+            command.data.target,
+            command.data.repeat,
         )
-        return Result(type=ResultType.ORDER_ACCEPTED, data=command.data)
+        await self._broadcast_game()
 
-    async def dispatch_cancel(self, player_id: str | None, command: Command) -> Result:
+    async def dispatch_cancel(self, player_id: str | None, command: Command) -> None:
         if not isinstance(command.data, CancelData):
             raise StateError("a source is required")
         self.state.remove_order(self._require_player(player_id), command.data.source)
-        return Result(type=ResultType.ORDER_CANCELLED, data=command.data)
+        await self._broadcast_game()
 
     async def dispatch_chat(self, player_id: str | None, command: Command) -> None:
         if not isinstance(command.data, ChatData):
@@ -115,10 +125,13 @@ class Dispatcher:
         await self._broadcast_game()
 
     async def player_left(self, player_id: str) -> None:
+        if not self.state.away(player_id):
+            return
+        await self._broadcast_game()
         await asyncio.sleep(RECONNECT_GRACE)
         if self.state.is_online(player_id):
             return
-        self.state.disconnect(player_id)
+        self.state.drop(player_id)
         await self._broadcast_game()
 
     @staticmethod

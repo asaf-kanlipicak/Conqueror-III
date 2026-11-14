@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { API_BASE_URL } from '../config'
-import { playChime, shouldChime } from '../lib/chime'
+import { playChime, playClick, shouldChime, shouldClickChat } from '../lib/chime'
 import {
   CommandType,
   Coord,
@@ -8,7 +8,7 @@ import {
   Game,
   GameMessage,
   MessageType,
-  Move,
+  PendingOrder,
   Player,
   PlayerColor
 } from '../types/schema'
@@ -22,13 +22,13 @@ export interface GameSession {
   myId: string | null
   me: Player | null
   myTurn: boolean
-  orders: Move[]
+  orders: PendingOrder[]
   error: string | null
   status: 'connecting' | 'live' | 'offline'
   join: (name: string, color: PlayerColor) => void
-  start: () => void
+  start: (size: number) => void
   reset: () => void
-  order: (source: Coord, target: Coord) => void
+  order: (source: Coord, target: Coord, repeat?: boolean) => void
   cancel: (source: Coord) => void
   cancelAll: () => void
   chat: (text: string) => void
@@ -38,7 +38,6 @@ export interface GameSession {
 export function useGame(): GameSession {
   const [game, setGame] = useState<Game | null>(null)
   const [myId, setMyId] = useState<string | null>(() => localStorage.getItem(STORAGE_KEY))
-  const [orders, setOrders] = useState<Move[]>([])
   const [error, setError] = useState<string | null>(null)
   const [status, setStatus] = useState<GameSession['status']>('connecting')
   const socket = useRef<WebSocket | null>(null)
@@ -67,7 +66,6 @@ export function useGame(): GameSession {
         switch (message.type) {
           case MessageType.CONNECT_SUCCESS:
             setGame(message.data as Game)
-            setOrders([])
             break
           case MessageType.GAME_UPDATE: {
             const next = message.data as Game
@@ -78,7 +76,6 @@ export function useGame(): GameSession {
               localStorage.removeItem(STORAGE_KEY)
               setMyId(null)
             }
-            if (!next.started || index < 0 || next.turn !== index) setOrders([])
             break
           }
           case MessageType.JOIN_SUCCESS: {
@@ -86,16 +83,6 @@ export function useGame(): GameSession {
             resuming.current = false
             setMyId(player.id)
             localStorage.setItem(STORAGE_KEY, player.id)
-            break
-          }
-          case MessageType.ORDER_ACCEPTED:
-            setOrders((current) => [...current, message.data as Move])
-            break
-          case MessageType.ORDER_CANCELLED: {
-            const cancelled = message.data as Move
-            setOrders((current) =>
-              current.filter((move) => !(move.source.x === cancelled.source.x && move.source.y === cancelled.source.y))
-            )
             break
           }
           case MessageType.ERROR:
@@ -143,6 +130,7 @@ export function useGame(): GameSession {
   const myIndex = game ? game.players.findIndex((player) => player.id === myId) : -1
   const me = game && myIndex >= 0 ? game.players[myIndex] : null
   const myTurn = Boolean(game?.started && !game?.winner && myIndex >= 0 && myIndex === game?.turn)
+  const orders = useMemo(() => (game?.orders ?? []).filter((order) => order.player === myId), [game, myId])
 
   const wasMyTurn = useRef<boolean | null>(null)
   useEffect(() => {
@@ -150,19 +138,31 @@ export function useGame(): GameSession {
     wasMyTurn.current = myTurn
   }, [myTurn])
 
+  const lastChat = useRef(0)
+  useEffect(() => {
+    if (!game) return
+    const line = game.chat[game.chat.length - 1]
+    if (!line) return
+    const seen = lastChat.current
+    lastChat.current = line.at
+    const fromMe = line.name === game.players.find((player) => player.id === myId)?.name
+    if (shouldClickChat(seen, line.at, fromMe)) playClick()
+  }, [game, myId])
+
   const join = useCallback((name: string, color: PlayerColor) => send(CommandType.JOIN, { name, color }), [send])
-  const start = useCallback(() => send(CommandType.START), [send])
+  const start = useCallback((size: number) => send(CommandType.START, { size }), [send])
   const reset = useCallback(() => send(CommandType.RESET), [send])
-  const order = useCallback((source: Coord, target: Coord) => send(CommandType.MOVE, { source, target }), [send])
+  const order = useCallback(
+    (source: Coord, target: Coord, repeat?: boolean) =>
+      send(CommandType.MOVE, repeat === undefined ? { source, target } : { source, target, repeat }),
+    [send]
+  )
   const cancel = useCallback((source: Coord) => send(CommandType.CANCEL, { source }), [send])
   const cancelAll = useCallback(() => {
     for (const move of orders) send(CommandType.CANCEL, { source: move.source })
   }, [orders, send])
   const chat = useCallback((text: string) => send(CommandType.CHAT, { text }), [send])
-  const endTurn = useCallback(() => {
-    setOrders([])
-    send(CommandType.END_TURN)
-  }, [send])
+  const endTurn = useCallback(() => send(CommandType.END_TURN), [send])
 
   return {
     game,

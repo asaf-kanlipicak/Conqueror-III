@@ -1,17 +1,19 @@
 import { useState } from 'react'
 import { Game, PlayerColor } from '../types/schema'
+import { BOARD_SIZES } from '../lib/board'
 import { PALETTE } from '../utils/palette'
 
 interface LobbyProps {
   game: Game
   myId: string | null
   onJoin: (name: string, color: PlayerColor) => void
-  onStart: () => void
+  onStart: (size: number) => void
 }
 
 export function Lobby({ game, myId, onJoin, onStart }: LobbyProps) {
   const [name, setName] = useState('')
   const [color, setColor] = useState<PlayerColor | null>(null)
+  const [size, setSize] = useState(BOARD_SIZES[BOARD_SIZES.length - 1])
 
   const seated = game.players.some((player) => player.id === myId)
   const taken = new Set(game.players.map((player) => player.color))
@@ -24,7 +26,19 @@ export function Lobby({ game, myId, onJoin, onStart }: LobbyProps) {
         <p className="muted">
           {game.players.length < 2 ? 'one more player is needed' : 'everyone else can still join'}
         </p>
-        <button className="btn" disabled={game.players.length < 2} onClick={onStart}>
+        <div className="sizes">
+          {BOARD_SIZES.map((candidate) => (
+            <button
+              key={candidate}
+              type="button"
+              className={`size${size === candidate ? ' picked' : ''}`}
+              onClick={() => setSize(candidate)}
+            >
+              {candidate} × {candidate}
+            </button>
+          ))}
+        </div>
+        <button className="btn" disabled={game.players.length < 2} onClick={() => onStart(size)}>
           start the game
         </button>
       </section>

@@ -1,12 +1,13 @@
 import { useEffect, useState } from 'react'
-import { Coord, Game, Move, Player } from '../types/schema'
+import { Coord, Game, PendingOrder, Player } from '../types/schema'
 import { OrderList } from './OrderList'
 
 interface TurnPanelProps {
   game: Game
   myId: string | null
   myTurn: boolean
-  orders: Move[]
+  orders: PendingOrder[]
+  onOrder: (source: Coord, target: Coord, repeat: boolean) => void
   onCancelOrder: (source: Coord) => void
   onCancelAll: () => void
   onEndTurn: () => void
@@ -18,6 +19,7 @@ export function TurnPanel({
   myId,
   myTurn,
   orders,
+  onOrder,
   onCancelOrder,
   onCancelAll,
   onEndTurn,
@@ -55,11 +57,20 @@ export function TurnPanel({
       {!winner && me && !me.eliminated && (
         <>
           <p className="turn-line">{myTurn ? 'your move' : `waiting for ${active?.name ?? '…'}`}</p>
-          {myTurn && (
-            <OrderList game={game} myId={myId} orders={orders} onCancel={onCancelOrder} onCancelAll={onCancelAll} />
-          )}
+          <OrderList
+            game={game}
+            myId={myId}
+            orders={orders}
+            onOrder={onOrder}
+            onCancel={onCancelOrder}
+            onCancelAll={onCancelAll}
+          />
           <button className="btn" disabled={!myTurn} onClick={onEndTurn}>
-            {orders.length === 0 ? 'end turn' : `end turn · ${orders.length} ordered`}
+            {!myTurn
+              ? 'waiting for your turn'
+              : orders.length === 0
+                ? 'end turn'
+                : `end turn · ${orders.length} ordered`}
           </button>
         </>
       )}

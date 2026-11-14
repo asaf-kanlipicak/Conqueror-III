@@ -1,19 +1,36 @@
-import { useMemo, useState } from 'react'
-import { Coord, Game, Move, Tile, TileKind } from '../types/schema'
+import { useMemo, useRef, useState } from 'react'
+import { Coord, Game, PendingOrder, Tile, TileKind } from '../types/schema'
 import { INK, NEUTRAL_FILL, PALETTE, WATER_FILL } from '../utils/palette'
-import { boardSpan, isAdjacent, isAttack, odds, orderArrow, sameCoord, TILE_SIZE } from '../lib/board'
+import {
+  boardSpan,
+  clickTile,
+  isAdjacent,
+  isAttack,
+  odds,
+  orderArrow,
+  orderCount,
+  sameCoord,
+  TILE_SIZE
+} from '../lib/board'
 
 interface BoardProps {
   game: Game
   myId: string | null
-  orders: Move[]
   onOrder: (source: Coord, target: Coord) => void
   onCancel: (source: Coord) => void
 }
 
-export function Board({ game, myId, orders, onOrder, onCancel }: BoardProps) {
+interface Tip {
+  x: number
+  y: number
+  text: string
+}
+
+export function Board({ game, myId, onOrder, onCancel }: BoardProps) {
   const [selected, setSelected] = useState<Coord | null>(null)
   const [hovered, setHovered] = useState<Coord | null>(null)
+  const [tip, setTip] = useState<Tip | null>(null)
+  const area = useRef<HTMLDivElement>(null)
 
   const swatches = useMemo(
     () => new Map(game.players.map((player) => [player.id, PALETTE[player.color]])),
@@ -22,47 +39,62 @@ export function Board({ game, myId, orders, onOrder, onCancel }: BoardProps) {
 
   const side = game.tiles.length
   const span = boardSpan(side)
-  const myIndex = game.players.findIndex((player) => player.id === myId)
-  const myTurn = game.started && !game.winner && myIndex >= 0 && myIndex === game.turn
+  const me = game.players.find((player) => player.id === myId)
+  const canPlay = game.started && !game.winner && Boolean(me) && !me?.eliminated
+  const orders = game.orders
 
   const tileAt = (coord: Coord): Tile => game.tiles[coord.y][coord.x]
 
+  const mineAt = (coord: Coord): PendingOrder | undefined =>
+    orders.find((order) => order.player === myId && sameCoord(order.source, coord))
+
   const click = (coord: Coord): void => {
-    if (!myTurn) return
-    if (orders.some((move) => sameCoord(move.source, coord))) {
-      onCancel(coord)
-      setSelected(coord)
+    if (!canPlay) return
+    const action = clickTile(selected, coord, tileAt(coord).owner === myId, Boolean(mineAt(coord)))
+    if (action.kind === 'select') {
+      setSelected(action.coord)
       return
     }
-    if (selected && isAdjacent(selected, coord)) {
-      onOrder(selected, coord)
-      setSelected(null)
-      return
-    }
-    setSelected(tileAt(coord).owner === myId ? coord : null)
+    if (action.kind === 'cancel') onCancel(action.source)
+    else onOrder(action.source, action.target)
+    setSelected(null)
   }
 
   const caption = ((): string => {
-    if (!myTurn) {
-      if (game.winner) return 'the war is over'
-      const active = game.players[game.turn]
-      return active ? `waiting for ${active.name}` : ''
-    }
+    if (!game.started) return 'the table is being set'
+    if (game.winner) return 'the war is over'
+    if (!me) return 'watching from the rail'
+    if (me.eliminated) return 'you are out'
     if (!selected) return 'pick one of your tiles'
     const source = tileAt(selected)
-    if (!hovered || !isAdjacent(selected, hovered)) return `${source.soldiers} men · pick a neighbour`
+    if (!hovered || !isAdjacent(selected, hovered)) return `${source.soldiers} soldiers · pick a neighbour`
     const target = tileAt(hovered)
-    if (target.owner === myId) return `${source.soldiers} men joining ${target.soldiers}`
+    if (target.owner === myId) return `${source.soldiers} soldiers joining ${target.soldiers}`
     if (target.soldiers === 0) return `walk in with ${source.soldiers}`
     const chance = Math.round(odds(source.soldiers, target.soldiers) * 100)
     return `${source.soldiers} vs ${target.soldiers} · ${chance}% to win the exchange`
   })()
 
+  const orderTip = (order: PendingOrder): string => {
+    const target = tileAt(order.target)
+    const count = orderCount(game, order)
+    const mark = order.repeat ? '↻ ' : ''
+    if (target.owner === order.player) return `${mark}${count} join ${target.soldiers}`
+    if (target.soldiers === 0) return `${mark}walk in with ${count}`
+    return `${mark}${count} vs ${target.soldiers} · ${Math.round(odds(count, target.soldiers) * 100)}%`
+  }
+
+  const showTip = (point: { clientX: number; clientY: number }, order: PendingOrder): void => {
+    const rect = area.current?.getBoundingClientRect()
+    if (!rect) return
+    setTip({ x: point.clientX - rect.left, y: point.clientY - rect.top, text: orderTip(order) })
+  }
+
   return (
     <div className="board-frame">
-      <div className="board-area">
+      <div className="board-area" ref={area}>
         <div
-          className={`board${myTurn ? ' playable' : ''}`}
+          className={`board${canPlay ? ' playable' : ''}`}
           style={{ gridTemplateColumns: `repeat(${side}, ${TILE_SIZE}px)` }}
           onMouseLeave={() => setHovered(null)}
         >
@@ -71,7 +103,7 @@ export function Board({ game, myId, orders, onOrder, onCancel }: BoardProps) {
               const coord = { x, y }
               const swatch = tile.owner ? swatches.get(tile.owner) : undefined
               const fill = swatch ? swatch.fill : tile.kind === TileKind.WATER ? WATER_FILL : NEUTRAL_FILL
-              const queued = orders.some((move) => sameCoord(move.source, coord))
+              const queued = orders.some((order) => sameCoord(order.source, coord))
               const digits = tile.soldiers > 0 ? String(tile.soldiers).length : 0
               const classes = [
                 'tile',
@@ -99,46 +131,59 @@ export function Board({ game, myId, orders, onOrder, onCancel }: BoardProps) {
         </div>
 
         <svg className="orders" width={span} height={span} aria-hidden="true">
-          <defs>
-            <marker
-              id="arrow-attack"
-              viewBox="0 0 12 12"
-              refX="10"
-              refY="6"
-              markerWidth="12"
-              markerHeight="12"
-              markerUnits="userSpaceOnUse"
-              orient="auto"
-            >
-              <path d="M0.5,1 L11,6 L0.5,11 z" className="head-attack" />
-            </marker>
-            <marker
-              id="arrow-move"
-              viewBox="0 0 12 12"
-              refX="10"
-              refY="6"
-              markerWidth="12"
-              markerHeight="12"
-              markerUnits="userSpaceOnUse"
-              orient="auto"
-            >
-              <path d="M0.5,1 L11,6 L0.5,11 z" className="head-move" />
-            </marker>
-          </defs>
-          {orders.map((move) => {
-            const attack = isAttack(game, move, myId)
-            const arrow = orderArrow(move.source, move.target)
-            const head = attack ? 'url(#arrow-attack)' : 'url(#arrow-move)'
+          {orders.map((order) => {
+            const mine = order.player === myId
+            const attack = isAttack(game, order, order.player)
+            const { head, ...shaft } = orderArrow(order.source, order.target)
+            const rival = mine ? null : swatches.get(order.player)?.stroke
             return (
-              <g key={`${move.source.x}:${move.source.y}`}>
-                <line {...arrow} className="arrow-casing" />
-                <line {...arrow} markerEnd={head} className={attack ? 'arrow-attack' : 'arrow-move'} />
+              <g key={`${order.source.x}:${order.source.y}`}>
+                <line {...shaft} className="arrow-casing" />
+                <line
+                  {...shaft}
+                  className={mine ? (attack ? 'arrow-attack' : 'arrow-move') : 'arrow-rival'}
+                  style={rival ? { stroke: rival } : undefined}
+                  strokeDasharray={rival ? '6 4' : undefined}
+                />
+                <path
+                  d={head}
+                  className={`arrow-head${attack ? ' attack' : ''}`}
+                  style={rival ? { fill: rival } : undefined}
+                />
+                {order.repeat && (
+                  <circle
+                    cx={shaft.x1}
+                    cy={shaft.y1}
+                    r={3.2}
+                    className={`arrow-pin${attack ? ' attack' : ''}`}
+                    style={rival ? { fill: rival } : undefined}
+                  />
+                )}
+                <line
+                  {...shaft}
+                  className="arrow-hit"
+                  onMouseEnter={(event) => showTip(event, order)}
+                  onMouseLeave={() => setTip(null)}
+                />
               </g>
             )
           })}
         </svg>
+
+        {tip && (
+          <span className="tip" style={{ left: tip.x, top: tip.y }}>
+            {tip.text}
+          </span>
+        )}
       </div>
-      <p className="caption">{caption}</p>
+      <p className="caption">
+        <span>{caption}</span>
+        {hovered && (
+          <span className="coord">
+            ({hovered.x}, {hovered.y})
+          </span>
+        )}
+      </p>
     </div>
   )
 }
