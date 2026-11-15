@@ -15,3 +15,20 @@ LOG_LIMIT = 60
 CHAT_LIMIT = 50
 CHAT_MAX = 200
 RECONNECT_GRACE = 15
+
+BOT_PAUSE = 1.0
+BOT_FORT_RATIO = 2
+BOT_FARM_FLOOR = BUILDING_COST * 2
+BOT_NAMES = (
+    "Alparslan",
+    "Temüjin",
+    "Melikşah",
+    "Batu",
+    "Fatih",
+    "Tuğrul",
+    "Kubilay",
+    "Sencer",
+    "Berke",
+    "Kılıç Arslan",
+    "Ögedey",
+)

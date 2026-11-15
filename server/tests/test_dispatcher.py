@@ -1,8 +1,9 @@
 import asyncio
+import random
 
 from connection.manager import Manager
 from game import dispatcher as dispatcher_module
-from game.dispatcher import Dispatcher
+from game.dispatcher import Command, CommandType, Dispatcher
 from game.enums import PlayerColor
 from game.schemas import Coord
 
@@ -52,3 +53,42 @@ def test_a_second_drop_for_the_same_player_is_ignored(monkeypatch):
     asyncio.run(dispatcher.player_left(alice.id))
 
     assert len(dispatcher.state.game.log) == before
+
+
+def test_a_bot_takes_its_turn(monkeypatch):
+    monkeypatch.setattr(dispatcher_module, "BOT_PAUSE", 0)
+    monkeypatch.setattr(random, "random", lambda: 0.0)
+    dispatcher = Dispatcher(Manager())
+    alice = dispatcher.state.join("alice", PlayerColor.RED)
+    seated = dispatcher.state.add_bot()
+    dispatcher.state.start(alice.id, 10)
+
+    asyncio.run(
+        dispatcher.dispatch_end_turn(alice.id, Command(type=CommandType.END_TURN))
+    )
+
+    assert dispatcher.state.current is not None
+    assert dispatcher.state.current.id == alice.id
+    assert dispatcher.state.game.round == 2
+    owned = [
+        tile for row in dispatcher.state.game.tiles for tile in row if tile.owner == seated.id
+    ]
+    assert len(owned) == 2
+    assert any(order.player == seated.id for order in dispatcher.state.game.orders)
+
+
+def test_a_bot_waits_for_its_turn(monkeypatch):
+    monkeypatch.setattr(dispatcher_module, "BOT_PAUSE", 0)
+    dispatcher = Dispatcher(Manager())
+    alice = dispatcher.state.join("alice", PlayerColor.RED)
+    dispatcher.state.add_bot()
+    dispatcher.state.start(alice.id, 10)
+    before = [[tile.owner for tile in row] for row in dispatcher.state.game.tiles]
+
+    asyncio.run(dispatcher.dispatch_move(
+        alice.id, Command(type=CommandType.MOVE, data={"source": {"x": 0, "y": 0}, "target": {"x": 1, "y": 0}})
+    ))
+
+    assert [[tile.owner for tile in row] for row in dispatcher.state.game.tiles] == before
+    assert dispatcher.state.current is not None
+    assert dispatcher.state.current.id == alice.id

@@ -3,12 +3,14 @@ from fastapi.testclient import TestClient
 
 import main
 from game import dispatcher as dispatcher_module
+from game.constants import BOT_NAMES
 from game.state import State
 
 
 @pytest.fixture
 def client(monkeypatch):
     monkeypatch.setattr(dispatcher_module, "RECONNECT_GRACE", 0)
+    monkeypatch.setattr(dispatcher_module, "BOT_PAUSE", 0)
     main.dispatcher.state = State()
     main.sessions.clear()
     with TestClient(main.app) as test_client:
@@ -196,6 +198,26 @@ def test_a_farm_can_be_built_over_the_socket(client):
             {"type": "BUILD", "data": {"source": {"x": 19, "y": 19}, "building": "fort"}}
         )
         assert "not your turn" in receive_until(bob, "ERROR")["data"]["message"]
+
+
+def test_a_bot_is_seated_and_plays_its_turn(client):
+    with client.websocket_connect("/ws") as alice:
+        receive_until(alice, "CONNECT_SUCCESS")
+        alice.send_json({"type": "JOIN", "data": {"name": "alice", "color": "red"}})
+        receive_until(alice, "JOIN_SUCCESS")
+
+        alice.send_json({"type": "BOT"})
+        game = wait_game(alice, lambda state: len(state["players"]) == 2)
+        assert game["players"][1]["bot"] is True
+        assert game["players"][1]["name"] in BOT_NAMES
+
+        alice.send_json({"type": "START", "data": {"size": 10}})
+        wait_game(alice, lambda state: state["started"])
+
+        alice.send_json({"type": "END_TURN"})
+        game = wait_game(alice, lambda state: state["round"] == 2 and state["turn"] == 0)
+        assert game["players"][1]["bot"] is True
+        assert any(order["player"] == game["players"][1]["id"] for order in game["orders"])
 
 
 def test_reset_clears_the_table(client):

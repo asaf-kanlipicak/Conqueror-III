@@ -23,6 +23,7 @@ function App() {
     start,
     shape,
     reset,
+    addBot,
     order,
     cancel,
     build,
@@ -71,7 +72,7 @@ function App() {
 
       <aside className="side">
         <Roster game={game} myId={myId} />
-        <Lobby game={game} myId={myId} onJoin={join} onStart={start} onShape={shape} />
+        <Lobby game={game} myId={myId} onJoin={join} onStart={start} onShape={shape} onBot={addBot} />
         <TurnPanel
           game={game}
           myId={myId}

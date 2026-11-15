@@ -3,9 +3,11 @@ import time
 import uuid
 from math import ceil
 
+from game import bot
 from game.constants import (
     BOARD_SIZE,
     BOARD_SIZES,
+    BOT_NAMES,
     BUILDING_COST,
     CAPITAL_GARRISON,
     CHAT_LIMIT,
@@ -129,6 +131,20 @@ class State:
         self._log(f"{player.name} joined as {player.color}")
         return player
 
+    def add_bot(self) -> Player:
+        if self.game.started:
+            raise StateError("the game has already started")
+        if len(self.game.players) >= len(_seats(BOARD_SIZE)):
+            raise StateError("the game is full")
+        taken = {player.color for player in self.game.players}
+        color = next(color for color in PlayerColor if color not in taken)
+        names = {player.name for player in self.game.players}
+        name = random.choice([name for name in BOT_NAMES if name not in names])
+        player = Player(id=uuid.uuid4().hex[:8], name=name, color=color, bot=True)
+        self.game.players.append(player)
+        self._log(f"{player.name} joined as {player.color}")
+        return player
+
     def resume(self, player_id: str) -> Player:
         player = self.player(player_id)
         player.online = True
@@ -158,8 +174,9 @@ class State:
         player = self._find(player_id)
         return player is not None and player.online
 
-    def shape(self, player_id: str, size: int) -> None:
-        self.player(player_id)
+    def shape(self, player_id: str | None, size: int) -> None:
+        if player_id is not None:
+            self.player(player_id)
         if self.game.started:
             raise StateError("the map is already in play")
         if size not in BOARD_SIZES:
@@ -167,8 +184,9 @@ class State:
         self.game.size = size
         self.game.tiles = self._build_tiles(size)
 
-    def start(self, player_id: str, size: int = BOARD_SIZE) -> None:
-        self.player(player_id)
+    def start(self, player_id: str | None, size: int = BOARD_SIZE) -> None:
+        if player_id is not None:
+            self.player(player_id)
         if self.game.started:
             raise StateError("the game has already started")
         if len(self.game.players) < 2:
@@ -230,6 +248,9 @@ class State:
         player = self._require_turn(player_id)
         if player.eliminated:
             raise StateError("you are out of the game")
+        self._raise(player, coord, building)
+
+    def _raise(self, player: Player, coord: Coord, building: BuildingKind) -> None:
         tile = self.tile(coord)
         if tile.owner != player.id:
             raise StateError("that tile is not yours")
@@ -242,6 +263,21 @@ class State:
         player.gold -= BUILDING_COST
         tile.buildings.append(building)
         self._log(f"{player.name} raised a {building} at {_label(coord)}")
+
+    def plan_bots(self) -> None:
+        if not self.game.started or self.game.winner is not None:
+            return
+        current = self.current
+        for player in self.game.players:
+            if not player.bot or player.eliminated:
+                continue
+            self.game.orders = [order for order in self.game.orders if order.player != player.id]
+            plan = bot.think(self.game, player)
+            for order in plan.orders:
+                self.add_order(player.id, order.source, order.target)
+            if current is not None and current.id == player.id:
+                for coord, building in plan.builds:
+                    self._raise(player, coord, building)
 
     def chat(self, player_id: str, text: str) -> None:
         player = self.player(player_id)

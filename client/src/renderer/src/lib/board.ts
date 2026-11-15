@@ -3,6 +3,7 @@ import { BuildingKind, Coord, Game, Move, PendingOrder, Tile, TileKind } from '.
 export const TILE_SIZE = 42
 export const TILE_GAP = 1
 export const BOARD_SIZES = [10, 20]
+export const SEATS = 4
 export const BUILDING_COST = 250
 export const FORT_DEFENSE = 2
 

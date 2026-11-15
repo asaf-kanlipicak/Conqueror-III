@@ -29,7 +29,8 @@ A tile with 0 soldiers is empty: walking into it needs no roll and costs nothing
 
 - 2 to 4 players. Join order is turn order.
 - Seats are taken in this order: top-left, bottom-right, top-right, bottom-left.
-- Any player can start the game once at least two have joined.
+- Anyone can start the game once at least two have joined — seated or not, which is how a table of
+  bots gets going.
 - A player with no land tiles left is out, and their soldiers still on water vanish. Soldiers on
   water never count as territory.
 - A player whose connection drops keeps their tiles and soldiers. Queued orders that were never
@@ -124,6 +125,34 @@ Gold buys buildings, on your own land, on your own turn, 250 apiece.
 
 Last player with land tiles wins.
 
+## Bots
+
+A bot takes a seat like anyone else and plays by the same rules. It has no hidden information and no
+memory between turns: it plans from scratch, and the plan is public — the same arrows, visible while
+the humans are playing.
+
+The plan is a flow field. Every tile the bot does not own is a target; a breadth-first search over
+land and water gives every tile its distance to the nearest one. Then, for each of the bot's tiles:
+
+- adjacent to a target and strong enough to break even (`soldiers ≥ guard`, so a win captures) —
+  attack the cheapest neighbour, preferring the richer pile on a tie
+- adjacent to a target but outgunned — hold, and let the field feed it
+- otherwise — send everything one step down the field
+
+Because the flow only ever moves downhill, a stack walks one tile a turn and no two tiles swap. Open
+water is part of the field, so a bot crosses the river the way it crosses land: one tile at a time,
+with a stack that has to survive the crossing.
+
+Gold follows one rule: **keep 250 in hand**, spend the rest.
+
+- A **fort** goes on a holding tile next to an enemy player, while the enemy could still be held at
+  twice the garrison (`sum of adjacent enemy stacks ≤ 2 × garrison`). Holding tiles are the only ones
+  the flow does not drain — anywhere else a fort would be left standing on an empty tile.
+- A **farm** goes on the deepest tile the bot owns, and only once gold reaches 500. Spend at 250 and
+  the bot would never have the coin for a fort when it finally needed one.
+
+A bot's turn is announced, then played a second later, so the table sees the plan before it resolves.
+
 ## Starting constants (all tunable)
 
 | constant                 | value        |
@@ -142,5 +171,5 @@ Last player with land tiles wins.
 
 ## Not in v1
 
-Docks, ships, naval combat, AI opponents, tech trees, unit types, fog of war, partial transfers,
-extra win conditions.
+Docks, ships, naval combat, tech trees, unit types, fog of war, partial transfers, extra win
+conditions.

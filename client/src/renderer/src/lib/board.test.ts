@@ -27,8 +27,8 @@ function sample(): Game {
       [tile('b', 3, TileKind.WATER), tile('a', 0)]
     ],
     players: [
-      { id: 'a', name: 'alice', color: PlayerColor.RED, eliminated: false, online: true, gold: 0 },
-      { id: 'b', name: 'bob', color: PlayerColor.BLUE, eliminated: false, online: true, gold: 0 }
+      { id: 'a', name: 'alice', color: PlayerColor.RED, eliminated: false, online: true, bot: false, gold: 0 },
+      { id: 'b', name: 'bob', color: PlayerColor.BLUE, eliminated: false, online: true, bot: false, gold: 0 }
     ],
     orders: [],
     turn: 0,

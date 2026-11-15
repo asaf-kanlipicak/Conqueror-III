@@ -15,6 +15,7 @@ class Player(BaseModel):
     color: PlayerColor
     eliminated: bool = False
     online: bool = True
+    bot: bool = False
     gold: int = 0
 
 

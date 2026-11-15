@@ -32,6 +32,7 @@ export function Roster({ game, myId }: RosterProps) {
               <span className="who">
                 {player.name}
                 {player.id === myId && <span className="tag">you</span>}
+                {player.bot && <span className="tag">bot</span>}
                 <span className={`dot${player.online ? ' live' : ''}`} title={player.online ? 'online' : 'away'} />
               </span>
               <span className="figure">{totals.tiles}</span>

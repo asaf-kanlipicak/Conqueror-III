@@ -4,7 +4,7 @@ from enum import StrEnum
 from pydantic import BaseModel, SerializeAsAny
 
 from connection.manager import Manager
-from game.constants import RECONNECT_GRACE
+from game.constants import BOT_PAUSE, RECONNECT_GRACE
 from game.schemas import (
     BuildData,
     CancelData,
@@ -28,6 +28,7 @@ class CommandType(StrEnum):
     BUILD = "BUILD"
     CHAT = "CHAT"
     END_TURN = "END_TURN"
+    BOT = "BOT"
     RESET = "RESET"
 
 
@@ -70,6 +71,7 @@ class Dispatcher:
             CommandType.BUILD: self.dispatch_build,
             CommandType.CHAT: self.dispatch_chat,
             CommandType.END_TURN: self.dispatch_end_turn,
+            CommandType.BOT: self.dispatch_bot,
             CommandType.RESET: self.dispatch_reset,
         }
 
@@ -95,13 +97,13 @@ class Dispatcher:
 
     async def dispatch_start(self, player_id: str | None, command: Command) -> None:
         data = command.data if isinstance(command.data, StartData) else StartData()
-        self.state.start(self._require_player(player_id), data.size)
-        await self._broadcast_game()
+        self.state.start(player_id, data.size)
+        await self._settle_bots()
 
     async def dispatch_map(self, player_id: str | None, command: Command) -> None:
         if not isinstance(command.data, StartData):
             raise StateError("a size is required")
-        self.state.shape(self._require_player(player_id), command.data.size)
+        self.state.shape(player_id, command.data.size)
         await self._broadcast_game()
 
     async def dispatch_move(self, player_id: str | None, command: Command) -> None:
@@ -137,6 +139,10 @@ class Dispatcher:
 
     async def dispatch_end_turn(self, player_id: str | None, _: Command) -> None:
         self.state.end_turn(self._require_player(player_id))
+        await self._settle_bots()
+
+    async def dispatch_bot(self, _: str | None, __: Command) -> None:
+        self.state.add_bot()
         await self._broadcast_game()
 
     async def dispatch_reset(self, _: str | None, __: Command) -> None:
@@ -151,7 +157,17 @@ class Dispatcher:
         if self.state.is_online(player_id):
             return
         self.state.drop(player_id)
-        await self._broadcast_game()
+        await self._settle_bots()
+
+    async def _settle_bots(self) -> None:
+        while True:
+            self.state.plan_bots()
+            await self._broadcast_game()
+            current = self.state.current
+            if current is None or not current.bot or self.state.game.winner is not None:
+                return
+            await asyncio.sleep(BOT_PAUSE)
+            self.state.end_turn(current.id)
 
     @staticmethod
     def _require_player(player_id: str | None) -> str:

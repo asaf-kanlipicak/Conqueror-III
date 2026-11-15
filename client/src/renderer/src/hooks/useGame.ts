@@ -30,6 +30,7 @@ export interface GameSession {
   start: (size: number) => void
   shape: (size: number) => void
   reset: () => void
+  addBot: () => void
   order: (source: Coord, target: Coord, repeat?: boolean) => void
   cancel: (source: Coord) => void
   build: (source: Coord, building: BuildingKind) => void
@@ -155,6 +156,7 @@ export function useGame(): GameSession {
   const start = useCallback((size: number) => send(CommandType.START, { size }), [send])
   const shape = useCallback((size: number) => send(CommandType.MAP, { size }), [send])
   const reset = useCallback(() => send(CommandType.RESET), [send])
+  const addBot = useCallback(() => send(CommandType.BOT), [send])
   const order = useCallback(
     (source: Coord, target: Coord, repeat?: boolean) =>
       send(CommandType.MOVE, repeat === undefined ? { source, target } : { source, target, repeat }),
@@ -180,6 +182,7 @@ export function useGame(): GameSession {
     start,
     shape,
     reset,
+    addBot,
     order,
     cancel,
     build,

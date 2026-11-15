@@ -29,6 +29,7 @@ export enum CommandType {
   BUILD = 'BUILD',
   CHAT = 'CHAT',
   END_TURN = 'END_TURN',
+  BOT = 'BOT',
   RESET = 'RESET'
 }
 
@@ -58,6 +59,7 @@ export interface Player {
   color: PlayerColor
   eliminated: boolean
   online: boolean
+  bot: boolean
   gold: number
 }
 
