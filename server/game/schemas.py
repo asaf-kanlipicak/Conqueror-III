@@ -1,34 +1,43 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 
 from game.constants import BOARD_SIZE
-from game.enums import PlayerColor
+from game.enums import BuildingKind, PlayerColor
 from game.models import Coord
 
 
-class JoinData(BaseModel):
+class Data(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+
+class JoinData(Data):
     name: str
     color: PlayerColor
 
 
-class StartData(BaseModel):
+class StartData(Data):
     size: int = BOARD_SIZE
 
 
-class MoveData(BaseModel):
+class MoveData(Data):
     source: Coord
     target: Coord
     repeat: bool | None = None
 
 
-class CancelData(BaseModel):
+class CancelData(Data):
     source: Coord
 
 
-class ResumeData(BaseModel):
+class BuildData(Data):
+    source: Coord
+    building: BuildingKind
+
+
+class ResumeData(Data):
     player_id: str
 
 
-class ChatData(BaseModel):
+class ChatData(Data):
     text: str
 
 

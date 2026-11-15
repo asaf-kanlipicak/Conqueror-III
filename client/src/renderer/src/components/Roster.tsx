@@ -18,6 +18,7 @@ export function Roster({ game, myId }: RosterProps) {
           <span>name</span>
           <span>land</span>
           <span>soldiers</span>
+          <span>gold</span>
         </div>
       )}
       <ul className="roster">
@@ -35,6 +36,7 @@ export function Roster({ game, myId }: RosterProps) {
               </span>
               <span className="figure">{totals.tiles}</span>
               <span className="figure">{totals.soldiers}</span>
+              <span className="figure">{player.gold}</span>
             </li>
           )
         })}

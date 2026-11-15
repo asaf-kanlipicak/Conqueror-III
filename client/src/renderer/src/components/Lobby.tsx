@@ -8,12 +8,12 @@ interface LobbyProps {
   myId: string | null
   onJoin: (name: string, color: PlayerColor) => void
   onStart: (size: number) => void
+  onShape: (size: number) => void
 }
 
-export function Lobby({ game, myId, onJoin, onStart }: LobbyProps) {
+export function Lobby({ game, myId, onJoin, onStart, onShape }: LobbyProps) {
   const [name, setName] = useState('')
   const [color, setColor] = useState<PlayerColor | null>(null)
-  const [size, setSize] = useState(BOARD_SIZES[BOARD_SIZES.length - 1])
 
   const seated = game.players.some((player) => player.id === myId)
   const taken = new Set(game.players.map((player) => player.color))
@@ -31,14 +31,17 @@ export function Lobby({ game, myId, onJoin, onStart }: LobbyProps) {
             <button
               key={candidate}
               type="button"
-              className={`size${size === candidate ? ' picked' : ''}`}
-              onClick={() => setSize(candidate)}
+              className={`size${game.size === candidate ? ' picked' : ''}`}
+              onClick={() => onShape(candidate)}
             >
               {candidate} × {candidate}
             </button>
           ))}
         </div>
-        <button className="btn" disabled={game.players.length < 2} onClick={() => onStart(size)}>
+        <button className="link roll" onClick={() => onShape(game.size)}>
+          roll a new map
+        </button>
+        <button className="btn" disabled={game.players.length < 2} onClick={() => onStart(game.size)}>
           start the game
         </button>
       </section>

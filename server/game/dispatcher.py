@@ -6,6 +6,7 @@ from pydantic import BaseModel, SerializeAsAny
 from connection.manager import Manager
 from game.constants import RECONNECT_GRACE
 from game.schemas import (
+    BuildData,
     CancelData,
     ChatData,
     ErrorData,
@@ -21,8 +22,10 @@ class CommandType(StrEnum):
     JOIN = "JOIN"
     RESUME = "RESUME"
     START = "START"
+    MAP = "MAP"
     MOVE = "MOVE"
     CANCEL = "CANCEL"
+    BUILD = "BUILD"
     CHAT = "CHAT"
     END_TURN = "END_TURN"
     RESET = "RESET"
@@ -40,7 +43,7 @@ class ResultType(StrEnum):
 
 class Command(BaseModel):
     type: CommandType
-    data: JoinData | MoveData | CancelData | ResumeData | ChatData | StartData | None = None
+    data: JoinData | MoveData | CancelData | BuildData | ResumeData | ChatData | StartData | None = None
 
 
 class Event(BaseModel):
@@ -61,8 +64,10 @@ class Dispatcher:
             CommandType.JOIN: self.dispatch_join,
             CommandType.RESUME: self.dispatch_resume,
             CommandType.START: self.dispatch_start,
+            CommandType.MAP: self.dispatch_map,
             CommandType.MOVE: self.dispatch_move,
             CommandType.CANCEL: self.dispatch_cancel,
+            CommandType.BUILD: self.dispatch_build,
             CommandType.CHAT: self.dispatch_chat,
             CommandType.END_TURN: self.dispatch_end_turn,
             CommandType.RESET: self.dispatch_reset,
@@ -93,6 +98,12 @@ class Dispatcher:
         self.state.start(self._require_player(player_id), data.size)
         await self._broadcast_game()
 
+    async def dispatch_map(self, player_id: str | None, command: Command) -> None:
+        if not isinstance(command.data, StartData):
+            raise StateError("a size is required")
+        self.state.shape(self._require_player(player_id), command.data.size)
+        await self._broadcast_game()
+
     async def dispatch_move(self, player_id: str | None, command: Command) -> None:
         if not isinstance(command.data, MoveData):
             raise StateError("a source and a target are required")
@@ -108,6 +119,14 @@ class Dispatcher:
         if not isinstance(command.data, CancelData):
             raise StateError("a source is required")
         self.state.remove_order(self._require_player(player_id), command.data.source)
+        await self._broadcast_game()
+
+    async def dispatch_build(self, player_id: str | None, command: Command) -> None:
+        if not isinstance(command.data, BuildData):
+            raise StateError("a tile and a building are required")
+        self.state.build(
+            self._require_player(player_id), command.data.source, command.data.building
+        )
         await self._broadcast_game()
 
     async def dispatch_chat(self, player_id: str | None, command: Command) -> None:

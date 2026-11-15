@@ -6,6 +6,11 @@ class TileKind(StrEnum):
     WATER = "water"
 
 
+class BuildingKind(StrEnum):
+    FARM = "farm"
+    FORT = "fort"
+
+
 class PlayerColor(StrEnum):
     RED = "red"
     GREEN = "green"

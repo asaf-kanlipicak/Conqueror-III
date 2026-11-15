@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   boardSpan,
   clickTile,
+  guardOf,
   isAdjacent,
   isAttack,
   odds,
@@ -12,10 +13,10 @@ import {
   shownOrders,
   tileCenter
 } from './board'
-import { Game, PendingOrder, PlayerColor, TileKind, Tile } from '../types/schema'
+import { BuildingKind, Game, PendingOrder, PlayerColor, TileKind, Tile } from '../types/schema'
 
 function tile(owner: string | null, soldiers: number, kind: TileKind = TileKind.LAND): Tile {
-  return { kind, owner, soldiers }
+  return { kind, owner, soldiers, loot: 0, buildings: [] }
 }
 
 function sample(): Game {
@@ -26,8 +27,8 @@ function sample(): Game {
       [tile('b', 3, TileKind.WATER), tile('a', 0)]
     ],
     players: [
-      { id: 'a', name: 'alice', color: PlayerColor.RED, eliminated: false, online: true },
-      { id: 'b', name: 'bob', color: PlayerColor.BLUE, eliminated: false, online: true }
+      { id: 'a', name: 'alice', color: PlayerColor.RED, eliminated: false, online: true, gold: 0 },
+      { id: 'b', name: 'bob', color: PlayerColor.BLUE, eliminated: false, online: true, gold: 0 }
     ],
     orders: [],
     turn: 0,
@@ -108,6 +109,25 @@ describe('geometry', () => {
     const arrow = orderArrow({ x: 0, y: 0 }, { x: 1, y: 0 })
     expect(arrow.head.startsWith(`M${arrow.x2},${arrow.y2}`)).toBe(true)
     expect(arrow.head.endsWith('Z')).toBe(true)
+  })
+})
+
+describe('forts', () => {
+  it('doubles the garrison a fort is holding', () => {
+    const plain = tile('a', 100)
+    const fort = { ...tile('a', 100), buildings: [BuildingKind.FORT] }
+    expect(guardOf(plain)).toBe(100)
+    expect(guardOf(fort)).toBe(200)
+  })
+
+  it('gives an equal stack a third of a chance', () => {
+    const fort = { ...tile('a', 100), buildings: [BuildingKind.FORT] }
+    expect(odds(100, guardOf(fort))).toBeCloseTo(1 / 3)
+    expect(odds(100, guardOf(tile('a', 100)))).toBeCloseTo(1 / 2)
+  })
+
+  it('still counts a farm as no defence', () => {
+    expect(guardOf({ ...tile('a', 100), buildings: [BuildingKind.FARM] })).toBe(100)
   })
 })
 

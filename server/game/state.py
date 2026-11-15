@@ -6,16 +6,21 @@ from math import ceil
 from game.constants import (
     BOARD_SIZE,
     BOARD_SIZES,
+    BUILDING_COST,
     CAPITAL_GARRISON,
     CHAT_LIMIT,
     CHAT_MAX,
+    FARM_BONUS,
+    FORT_DEFENSE,
+    GOLD_PER_BOT,
     LOG_LIMIT,
-    LOOT,
-    NEUTRAL_GARRISONS,
+    NEUTRAL_MAX,
+    NEUTRAL_MIN,
+    NEUTRAL_SPREAD,
     PRODUCTION,
     RIVER_WIDTH,
 )
-from game.enums import PlayerColor, TileKind
+from game.enums import BuildingKind, PlayerColor, TileKind
 from game.models import ChatLine, Coord, Game, PendingOrder, Player, Tile
 
 
@@ -25,6 +30,18 @@ class StateError(Exception):
 
 def _river(size: int) -> tuple[int, int]:
     return (size - RIVER_WIDTH) // 2, RIVER_WIDTH
+
+
+def _ring(x: int, y: int, size: int) -> int:
+    edge = size - 1
+    return max(min(x, edge - x), min(y, edge - y))
+
+
+def _garrison(ring: int, top: int) -> int:
+    share = max(0, ring - 1) / max(1, top - 2)
+    base = NEUTRAL_MIN + (NEUTRAL_MAX - NEUTRAL_MIN) * share
+    spread = base * NEUTRAL_SPREAD
+    return round(random.uniform(base - spread, base + spread))
 
 
 def _seats(size: int) -> tuple[tuple[int, int], ...]:
@@ -44,6 +61,14 @@ def _settle(tile: Tile) -> None:
         tile.owner = None
 
 
+def _raze(tile: Tile) -> str:
+    if not tile.buildings:
+        return ""
+    razed = " and ".join(f"a {building}" for building in tile.buildings)
+    tile.buildings = []
+    return f", razed {razed}"
+
+
 class State:
     def __init__(self):
         self.game = Game(tiles=self._build_tiles(BOARD_SIZE))
@@ -59,7 +84,8 @@ class State:
                 if wet:
                     row.append(Tile(kind=TileKind.WATER))
                 else:
-                    row.append(Tile(soldiers=random.choice(NEUTRAL_GARRISONS)))
+                    garrison = _garrison(_ring(x, y, size), start)
+                    row.append(Tile(soldiers=garrison, loot=garrison // 2))
             rows.append(row)
         return rows
 
@@ -132,6 +158,15 @@ class State:
         player = self._find(player_id)
         return player is not None and player.online
 
+    def shape(self, player_id: str, size: int) -> None:
+        self.player(player_id)
+        if self.game.started:
+            raise StateError("the map is already in play")
+        if size not in BOARD_SIZES:
+            raise StateError("that board is not on offer")
+        self.game.size = size
+        self.game.tiles = self._build_tiles(size)
+
     def start(self, player_id: str, size: int = BOARD_SIZE) -> None:
         self.player(player_id)
         if self.game.started:
@@ -140,8 +175,9 @@ class State:
             raise StateError("at least two players are needed")
         if size not in BOARD_SIZES:
             raise StateError("that board is not on offer")
-        self.game.size = size
-        self.game.tiles = self._build_tiles(size)
+        if size != self.game.size:
+            self.game.size = size
+            self.game.tiles = self._build_tiles(size)
         self.game.orders = []
         for player, (x, y) in zip(self.game.players, _seats(size)):
             tile = self.game.tiles[y][x]
@@ -189,6 +225,23 @@ class State:
                 self.game.orders.remove(order)
                 return
         raise StateError("that tile has no order")
+
+    def build(self, player_id: str, coord: Coord, building: BuildingKind) -> None:
+        player = self._require_turn(player_id)
+        if player.eliminated:
+            raise StateError("you are out of the game")
+        tile = self.tile(coord)
+        if tile.owner != player.id:
+            raise StateError("that tile is not yours")
+        if tile.kind != TileKind.LAND:
+            raise StateError("nothing can be built on water")
+        if building in tile.buildings:
+            raise StateError(f"there is already a {building} there")
+        if player.gold < BUILDING_COST:
+            raise StateError(f"a {building} costs {BUILDING_COST} gold")
+        player.gold -= BUILDING_COST
+        tile.buildings.append(building)
+        self._log(f"{player.name} raised a {building} at {_label(coord)}")
 
     def chat(self, player_id: str, text: str) -> None:
         player = self.player(player_id)
@@ -252,19 +305,25 @@ class State:
             self._log(f"{player.name} moved {count} to {_label(order.target)}")
             return
         if target.soldiers == 0:
+            gold = GOLD_PER_BOT if target.kind == TileKind.LAND and target.owner is None else 0
             target.owner = player.id
             target.soldiers = count
+            player.gold += gold
             source.soldiers -= count
             _settle(source)
-            self._log(f"{player.name} walked into {_label(order.target)} with {count}")
+            line = f"{player.name} walked into {_label(order.target)} with {count}"
+            if gold:
+                line += f", seized {gold} gold"
+            self._log(line + _raze(target))
             return
         self._battle(player, source, target, count, _label(order.target))
 
     def _battle(self, player: Player, source: Tile, target: Tile, attacker: int, where: str) -> None:
         defender = target.soldiers
-        total = attacker + defender
+        guard = defender * FORT_DEFENSE if BuildingKind.FORT in target.buildings else defender
+        total = attacker + guard
         if random.random() < attacker / total:
-            survivors = max(attacker - attacker * defender // (2 * total), 1)
+            survivors = max(attacker - attacker * guard // (2 * total), 1)
             remaining = defender - min(attacker, defender)
             if remaining:
                 target.soldiers = remaining
@@ -275,17 +334,23 @@ class State:
                     f"{remaining} defenders hold, attacker down to {survivors}"
                 )
                 return
-            loot = LOOT if target.kind == TileKind.LAND and target.owner is None else 0
+            loot = target.loot if target.kind == TileKind.LAND and target.owner is None else 0
+            gold = GOLD_PER_BOT if target.kind == TileKind.LAND and target.owner is None else 0
             target.owner = player.id
             target.soldiers = survivors + loot
+            player.gold += gold
             source.soldiers -= attacker
             _settle(source)
             line = f"{player.name} took {where} {attacker} vs {defender}: {survivors} soldiers"
-            self._log(line + (f" and looted {loot}" if loot else ""))
+            if loot:
+                line += f", looted {loot}"
+            if gold:
+                line += f", seized {gold} gold"
+            self._log(line + _raze(target))
             return
-        source.soldiers -= ceil(attacker * defender / total)
+        source.soldiers -= ceil(attacker * guard / total)
         _settle(source)
-        target.soldiers = defender - attacker * defender // (2 * total)
+        target.soldiers = defender - attacker * guard // (2 * total)
         self._log(
             f"{player.name} attacked {where} {attacker} vs {defender}: repelled, "
             f"attacker down to {source.soldiers}, defenders down to {target.soldiers}"
@@ -313,6 +378,7 @@ class State:
                     if tile.owner == player.id:
                         tile.owner = None
                         tile.soldiers = 0
+                        tile.buildings = []
 
     def _owns_land(self, player_id: str) -> bool:
         return any(
@@ -351,8 +417,11 @@ class State:
     def _produce(self) -> None:
         for row in self.game.tiles:
             for tile in row:
-                if tile.kind == TileKind.LAND and tile.owner is not None:
-                    tile.soldiers += PRODUCTION
+                if tile.kind != TileKind.LAND or tile.owner is None:
+                    continue
+                tile.soldiers += PRODUCTION
+                if BuildingKind.FARM in tile.buildings:
+                    tile.soldiers += FARM_BONUS
 
     def _log(self, line: str) -> None:
         self.game.log.append(line)

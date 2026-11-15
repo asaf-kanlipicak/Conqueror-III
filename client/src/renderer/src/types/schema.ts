@@ -3,6 +3,11 @@ export enum TileKind {
   WATER = 'water'
 }
 
+export enum BuildingKind {
+  FARM = 'farm',
+  FORT = 'fort'
+}
+
 export enum PlayerColor {
   RED = 'red',
   GREEN = 'green',
@@ -18,8 +23,10 @@ export enum CommandType {
   JOIN = 'JOIN',
   RESUME = 'RESUME',
   START = 'START',
+  MAP = 'MAP',
   MOVE = 'MOVE',
   CANCEL = 'CANCEL',
+  BUILD = 'BUILD',
   CHAT = 'CHAT',
   END_TURN = 'END_TURN',
   RESET = 'RESET'
@@ -41,6 +48,8 @@ export interface Tile {
   kind: TileKind
   owner: string | null
   soldiers: number
+  loot: number
+  buildings: BuildingKind[]
 }
 
 export interface Player {
@@ -49,6 +58,7 @@ export interface Player {
   color: PlayerColor
   eliminated: boolean
   online: boolean
+  gold: number
 }
 
 export interface Move {

@@ -1,9 +1,10 @@
 import { useMemo, useRef, useState } from 'react'
-import { Coord, Game, PendingOrder, Tile, TileKind } from '../types/schema'
+import { BuildingKind, Coord, Game, PendingOrder, Tile, TileKind } from '../types/schema'
 import { INK, NEUTRAL_FILL, PALETTE, WATER_FILL } from '../utils/palette'
 import {
   boardSpan,
   clickTile,
+  guardOf,
   isAdjacent,
   isAttack,
   odds,
@@ -18,6 +19,7 @@ interface BoardProps {
   myId: string | null
   onOrder: (source: Coord, target: Coord) => void
   onCancel: (source: Coord) => void
+  onPick: (coord: Coord) => void
 }
 
 interface Tip {
@@ -26,7 +28,7 @@ interface Tip {
   text: string
 }
 
-export function Board({ game, myId, onOrder, onCancel }: BoardProps) {
+export function Board({ game, myId, onOrder, onCancel, onPick }: BoardProps) {
   const [selected, setSelected] = useState<Coord | null>(null)
   const [hovered, setHovered] = useState<Coord | null>(null)
   const [tip, setTip] = useState<Tip | null>(null)
@@ -49,6 +51,7 @@ export function Board({ game, myId, onOrder, onCancel }: BoardProps) {
     orders.find((order) => order.player === myId && sameCoord(order.source, coord))
 
   const click = (coord: Coord): void => {
+    onPick(coord)
     if (!canPlay) return
     const action = clickTile(selected, coord, tileAt(coord).owner === myId, Boolean(mineAt(coord)))
     if (action.kind === 'select') {
@@ -71,7 +74,7 @@ export function Board({ game, myId, onOrder, onCancel }: BoardProps) {
     const target = tileAt(hovered)
     if (target.owner === myId) return `${source.soldiers} soldiers joining ${target.soldiers}`
     if (target.soldiers === 0) return `walk in with ${source.soldiers}`
-    const chance = Math.round(odds(source.soldiers, target.soldiers) * 100)
+    const chance = Math.round(odds(source.soldiers, guardOf(target)) * 100)
     return `${source.soldiers} vs ${target.soldiers} · ${chance}% to win the exchange`
   })()
 
@@ -81,7 +84,8 @@ export function Board({ game, myId, onOrder, onCancel }: BoardProps) {
     const mark = order.repeat ? '● ' : ''
     if (target.owner === order.player) return `${mark}${count} join ${target.soldiers}`
     if (target.soldiers === 0) return `${mark}walk in with ${count}`
-    return `${mark}${count} vs ${target.soldiers} · ${Math.round(odds(count, target.soldiers) * 100)}%`
+    const chance = Math.round(odds(count, guardOf(target)) * 100)
+    return `${mark}${count} vs ${target.soldiers} · ${chance}%`
   }
 
   const showTip = (point: { clientX: number; clientY: number }, order: PendingOrder): void => {
@@ -110,6 +114,7 @@ export function Board({ game, myId, onOrder, onCancel }: BoardProps) {
                 tile.kind === TileKind.WATER ? 'water' : '',
                 !tile.owner && tile.kind === TileKind.LAND ? 'neutral' : '',
                 digits > 3 ? 'd4' : digits > 2 ? 'd3' : '',
+                tile.buildings.includes(BuildingKind.FORT) ? 'fort' : '',
                 selected && sameCoord(selected, coord) ? 'selected' : '',
                 hovered && sameCoord(hovered, coord) && selected && isAdjacent(selected, coord) ? 'target' : '',
                 queued ? 'queued' : ''

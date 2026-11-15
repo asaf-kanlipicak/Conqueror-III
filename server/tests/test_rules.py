@@ -1,9 +1,21 @@
 import random
+from math import ceil
 
 import pytest
 
-from game.constants import CAPITAL_GARRISON, CHAT_LIMIT, CHAT_MAX, LOOT, PRODUCTION
-from game.enums import PlayerColor, TileKind
+from game.constants import (
+    BUILDING_COST,
+    CAPITAL_GARRISON,
+    CHAT_LIMIT,
+    CHAT_MAX,
+    FARM_BONUS,
+    GOLD_PER_BOT,
+    NEUTRAL_MAX,
+    NEUTRAL_MIN,
+    NEUTRAL_SPREAD,
+    PRODUCTION,
+)
+from game.enums import BuildingKind, PlayerColor, TileKind
 from game.schemas import Coord
 from game.state import State, StateError
 
@@ -100,17 +112,59 @@ def test_exchange_math(game, monkeypatch, attacker, defender, roll, survivors, d
         assert target.owner == bob.id
 
 
-def test_loot_only_comes_from_neutral_land(game, monkeypatch):
+def test_loot_is_half_the_garrison_the_map_was_made_with(game, monkeypatch):
     state, alice, _ = game
     monkeypatch.setattr(random, "random", lambda: 0.0)
     neutral = state.tile(Coord(x=1, y=0))
-    neutral.soldiers = 5
+    garrison = neutral.soldiers
+    assert neutral.loot == garrison // 2
+
     order(state, alice, (0, 0), (1, 0))
     state.end_turn(alice.id)
-    attacker, defender = START, 5
-    survivors = attacker - attacker * defender // (2 * (attacker + defender))
+
+    survivors = START - START * garrison // (2 * (START + garrison))
     assert neutral.owner == alice.id
-    assert neutral.soldiers == survivors + LOOT
+    assert neutral.soldiers == survivors + garrison // 2
+
+
+def test_a_worn_down_tile_still_pays_in_full(game, monkeypatch):
+    state, alice, _ = game
+    monkeypatch.setattr(random, "random", lambda: 0.0)
+    neutral = state.tile(Coord(x=1, y=0))
+    garrison = neutral.soldiers
+    neutral.soldiers = 20
+
+    order(state, alice, (0, 0), (1, 0))
+    state.end_turn(alice.id)
+
+    survivors = START - START * 20 // (2 * (START + 20))
+    assert neutral.soldiers == survivors + garrison // 2
+
+
+def test_loot_grows_with_the_ring(game, monkeypatch):
+    state, alice, _ = game
+    monkeypatch.setattr(random, "random", lambda: 0.0)
+    cheap = state.tile(Coord(x=1, y=0))
+    rich = state.tile(Coord(x=8, y=0))
+    step = state.tile(Coord(x=7, y=0))
+    step.owner = alice.id
+    step.soldiers = 400
+
+    assert cheap.loot < rich.loot
+    cheap_garrison = cheap.soldiers
+    rich_garrison = rich.soldiers
+
+    order(state, alice, (0, 0), (1, 0))
+    order(state, alice, (7, 0), (8, 0))
+    state.end_turn(alice.id)
+
+    def survivors(attacker, defender):
+        return attacker - attacker * defender // (2 * (attacker + defender))
+
+    assert cheap.owner == alice.id
+    assert rich.owner == alice.id
+    assert cheap.soldiers == survivors(START, cheap_garrison) + cheap_garrison // 2
+    assert rich.soldiers == survivors(400, rich_garrison) + rich_garrison // 2
 
 
 def test_round_production_reaches_everyone(game):
@@ -408,6 +462,70 @@ def test_a_board_size_must_be_on_offer():
     assert not state.game.started
 
 
+def test_the_map_can_be_laid_out_before_the_start(monkeypatch):
+    flat(monkeypatch)
+    state = State()
+    alice = state.join("alice", PlayerColor.RED)
+    state.join("bob", PlayerColor.BLUE)
+    assert state.game.size == 20
+
+    state.shape(alice.id, 10)
+
+    assert state.game.size == 10
+    assert len(state.game.tiles) == 10
+    assert state.tile(Coord(x=2, y=0)).soldiers == (NEUTRAL_MIN + NEUTRAL_MAX) // 2
+
+
+def test_the_game_starts_on_the_map_that_was_shown(monkeypatch):
+    flat(monkeypatch)
+    state = State()
+    alice = state.join("alice", PlayerColor.RED)
+    state.join("bob", PlayerColor.BLUE)
+    state.shape(alice.id, 10)
+    shown = [[tile.soldiers for tile in row] for row in state.game.tiles]
+
+    state.start(alice.id, 10)
+
+    assert state.game.size == 10
+    assert state.tile(Coord(x=2, y=0)).soldiers == shown[0][2]
+    assert state.tile(Coord(x=3, y=3)).soldiers == shown[3][3]
+
+
+def test_rolling_the_map_again_deals_a_new_one(monkeypatch):
+    rolls = iter(range(1000))
+
+    def counting(floor, ceiling):
+        return floor + (ceiling - floor) * (next(rolls) % 100) / 100
+
+    monkeypatch.setattr(random, "uniform", counting)
+    state = State()
+    alice = state.join("alice", PlayerColor.RED)
+    state.join("bob", PlayerColor.BLUE)
+    before = [[tile.soldiers for tile in row] for row in state.game.tiles]
+
+    state.shape(alice.id, 20)
+
+    after = [[tile.soldiers for tile in row] for row in state.game.tiles]
+    assert state.game.size == 20
+    assert before != after
+
+
+def test_the_map_is_fixed_once_the_game_is_on(game):
+    state, alice, _ = game
+    with pytest.raises(StateError, match="already in play"):
+        state.shape(alice.id, 10)
+
+
+def test_only_a_seated_player_can_lay_out_the_map():
+    state = State()
+    with pytest.raises(StateError, match="not in this game"):
+        state.shape("nobody", 10)
+    alice = state.join("alice", PlayerColor.RED)
+    with pytest.raises(StateError, match="not on offer"):
+        state.shape(alice.id, 13)
+    assert state.game.size == 20
+
+
 def test_four_players_take_the_four_corners():
     state = State()
     seats = [(0, 0), (19, 19), (19, 0), (0, 19)]
@@ -515,7 +633,7 @@ def test_a_snapshot_ignores_production(game):
     state.end_turn(bob.id)
     assert state.tile(Coord(x=0, y=0)).soldiers == START + PRODUCTION
     state.end_turn(alice.id)
-    assert "alice walked into (1, 0) with 210" in state.game.log
+    assert "alice walked into (1, 0) with 210" in state.game.log[-1]
     assert empty.soldiers == 210
     assert state.tile(Coord(x=0, y=0)).soldiers == PRODUCTION
 
@@ -669,3 +787,250 @@ def test_a_repeat_can_be_cancelled(game):
     order(state, alice, (0, 0), (1, 0), repeat=True)
     state.remove_order(alice.id, Coord(x=0, y=0))
     assert state.game.orders == []
+
+
+def flat(monkeypatch):
+    monkeypatch.setattr(random, "uniform", lambda low, high: (low + high) / 2)
+
+
+def test_garrisons_grow_towards_the_river(monkeypatch):
+    flat(monkeypatch)
+    state = State()
+    alice = state.join("alice", PlayerColor.RED)
+    state.join("bob", PlayerColor.BLUE)
+    state.start(alice.id, 10)
+
+    assert state.tile(Coord(x=1, y=0)).soldiers == NEUTRAL_MIN
+    assert state.tile(Coord(x=2, y=0)).soldiers == (NEUTRAL_MIN + NEUTRAL_MAX) // 2
+    assert state.tile(Coord(x=3, y=0)).soldiers == NEUTRAL_MAX
+    assert state.tile(Coord(x=1, y=0)).soldiers < state.tile(Coord(x=2, y=1)).soldiers
+    assert state.tile(Coord(x=2, y=1)).soldiers < state.tile(Coord(x=3, y=3)).soldiers
+
+
+def test_the_four_quadrants_match(monkeypatch):
+    flat(monkeypatch)
+    state = State()
+    alice = state.join("alice", PlayerColor.RED)
+    state.join("bob", PlayerColor.BLUE)
+    state.start(alice.id, 10)
+
+    for step in range(1, 4):
+        northwest = state.tile(Coord(x=step, y=0)).soldiers
+        assert state.tile(Coord(x=9 - step, y=9)).soldiers == northwest
+        assert state.tile(Coord(x=0, y=step)).soldiers == northwest
+        assert state.tile(Coord(x=9, y=9 - step)).soldiers == northwest
+
+
+def test_garrisons_stay_within_the_spread(monkeypatch):
+    seen = []
+
+    def watched(floor, ceiling):
+        seen.append((floor, ceiling))
+        return ceiling
+
+    monkeypatch.setattr(random, "uniform", watched)
+    state = State()
+    alice = state.join("alice", PlayerColor.RED)
+    state.join("bob", PlayerColor.BLUE)
+    state.start(alice.id, 10)
+
+    assert seen
+    for floor, ceiling in seen:
+        assert ceiling <= NEUTRAL_MAX * (1 + NEUTRAL_SPREAD)
+        assert floor >= NEUTRAL_MIN * (1 - NEUTRAL_SPREAD)
+        assert floor < ceiling
+    for row in state.game.tiles:
+        for tile in row:
+            assert tile.soldiers <= NEUTRAL_MAX * (1 + NEUTRAL_SPREAD)
+
+
+def test_every_neutral_tile_holds_a_garrison(monkeypatch):
+    flat(monkeypatch)
+    state = State()
+    alice = state.join("alice", PlayerColor.RED)
+    state.join("bob", PlayerColor.BLUE)
+    state.start(alice.id, 20)
+
+    for row in state.game.tiles:
+        for tile in row:
+            if tile.owner is not None:
+                continue
+            if tile.kind == TileKind.WATER:
+                assert tile.soldiers == 0
+                assert tile.loot == 0
+            else:
+                assert tile.soldiers >= NEUTRAL_MIN
+                assert tile.loot == tile.soldiers // 2
+
+
+def test_gold_comes_only_from_bot_land(game, monkeypatch):
+    state, alice, bob = game
+    monkeypatch.setattr(random, "random", lambda: 0.0)
+    assert alice.gold == 0
+
+    bot = state.tile(Coord(x=1, y=0))
+    bot.soldiers = 60
+    order(state, alice, (0, 0), (1, 0))
+    state.end_turn(alice.id)
+    assert bot.owner == alice.id
+    assert alice.gold == GOLD_PER_BOT
+
+    spoils = state.tile(Coord(x=18, y=19))
+    spoils.owner = bob.id
+    spoils.soldiers = 60
+    springboard = state.tile(Coord(x=18, y=18))
+    springboard.owner = alice.id
+    springboard.soldiers = 300
+    order(state, alice, (18, 18), (18, 19))
+    state.end_turn(bob.id)
+    state.end_turn(alice.id)
+    assert spoils.owner == alice.id
+    assert alice.gold == GOLD_PER_BOT
+
+
+def test_water_pays_no_gold(game, monkeypatch):
+    state, alice, _ = game
+    monkeypatch.setattr(random, "random", lambda: 0.0)
+    pond = state.tile(Coord(x=9, y=0))
+    assert pond.kind == TileKind.WATER
+    pond.owner = None
+    pond.soldiers = 40
+    state.tile(Coord(x=8, y=0)).owner = alice.id
+    state.tile(Coord(x=8, y=0)).soldiers = 300
+    order(state, alice, (8, 0), (9, 0))
+    state.end_turn(alice.id)
+    assert pond.owner == alice.id
+    assert alice.gold == 0
+
+
+def test_a_farm_pays_extra_production(game):
+    state, alice, bob = game
+    alice.gold = BUILDING_COST
+    state.build(alice.id, Coord(x=0, y=0), BuildingKind.FARM)
+    assert state.tile(Coord(x=0, y=0)).buildings == [BuildingKind.FARM]
+    state.end_turn(alice.id)
+    state.end_turn(bob.id)
+    assert state.tile(Coord(x=0, y=0)).soldiers == START + PRODUCTION + FARM_BONUS
+
+
+def test_a_fort_doubles_the_defence(game, monkeypatch):
+    state, alice, bob = game
+    monkeypatch.setattr(random, "random", lambda: 0.0)
+    keep = state.tile(Coord(x=1, y=0))
+    keep.owner = bob.id
+    keep.soldiers = 100
+    keep.buildings = [BuildingKind.FORT]
+    state.tile(Coord(x=0, y=0)).soldiers = 100
+
+    order(state, alice, (0, 0), (1, 0))
+    state.end_turn(alice.id)
+
+    attacker, guard = 100, 200
+    survivors = attacker - attacker * guard // (2 * (attacker + guard))
+    assert keep.owner == alice.id
+    assert keep.soldiers == survivors
+    assert keep.buildings == []
+
+
+def test_a_fort_still_loses_to_an_equal_stack_on_a_lucky_roll(game, monkeypatch):
+    state, alice, bob = game
+    monkeypatch.setattr(random, "random", lambda: 0.0)
+    keep = state.tile(Coord(x=1, y=0))
+    keep.owner = bob.id
+    keep.soldiers = 210
+    keep.buildings = [BuildingKind.FORT]
+    assert state.tile(Coord(x=0, y=0)).soldiers == 210
+
+    order(state, alice, (0, 0), (1, 0))
+    state.end_turn(alice.id)
+
+    assert keep.owner == alice.id
+
+
+def test_a_fort_repels_a_weaker_attack_more_cheaply(game, monkeypatch):
+    state, alice, bob = game
+    monkeypatch.setattr(random, "random", lambda: 1.0)
+    keep = state.tile(Coord(x=1, y=0))
+    keep.owner = bob.id
+    keep.soldiers = 100
+    keep.buildings = [BuildingKind.FORT]
+    state.tile(Coord(x=0, y=0)).soldiers = 100
+
+    order(state, alice, (0, 0), (1, 0))
+    state.end_turn(alice.id)
+
+    assert keep.owner == bob.id
+    assert state.tile(Coord(x=0, y=0)).soldiers == 100 - ceil(100 * 200 / 300)
+    assert keep.soldiers == 100 - 200 // 6
+
+
+def test_both_can_stand_on_one_tile(game):
+    state, alice, _ = game
+    alice.gold = BUILDING_COST * 2
+    state.build(alice.id, Coord(x=0, y=0), BuildingKind.FARM)
+    state.build(alice.id, Coord(x=0, y=0), BuildingKind.FORT)
+    assert state.tile(Coord(x=0, y=0)).buildings == [BuildingKind.FARM, BuildingKind.FORT]
+    assert alice.gold == 0
+
+
+def test_building_is_paid_for_once(game):
+    state, alice, _ = game
+    alice.gold = BUILDING_COST * 3
+    state.build(alice.id, Coord(x=0, y=0), BuildingKind.FARM)
+    assert alice.gold == BUILDING_COST * 2
+    with pytest.raises(StateError, match="already a farm"):
+        state.build(alice.id, Coord(x=0, y=0), BuildingKind.FARM)
+    assert alice.gold == BUILDING_COST * 2
+
+
+def test_building_needs_the_gold(game):
+    state, alice, _ = game
+    alice.gold = BUILDING_COST - 1
+    with pytest.raises(StateError, match=f"costs {BUILDING_COST}"):
+        state.build(alice.id, Coord(x=0, y=0), BuildingKind.FARM)
+    assert state.tile(Coord(x=0, y=0)).buildings == []
+
+
+def test_building_rules(game):
+    state, alice, bob = game
+    alice.gold = BUILDING_COST * 3
+    with pytest.raises(StateError, match="not yours"):
+        state.build(alice.id, Coord(x=1, y=0), BuildingKind.FARM)
+    pond = state.tile(Coord(x=9, y=0))
+    pond.owner = alice.id
+    pond.soldiers = 30
+    with pytest.raises(StateError, match="on water"):
+        state.build(alice.id, Coord(x=9, y=0), BuildingKind.FORT)
+    with pytest.raises(StateError, match="not your turn"):
+        state.build(bob.id, Coord(x=19, y=19), BuildingKind.FORT)
+    state.end_turn(alice.id)
+    with pytest.raises(StateError, match="not your turn"):
+        state.build(alice.id, Coord(x=0, y=0), BuildingKind.FARM)
+
+
+def test_a_captured_tile_loses_its_buildings(game, monkeypatch):
+    state, alice, bob = game
+    monkeypatch.setattr(random, "random", lambda: 0.0)
+    farm = state.tile(Coord(x=1, y=0))
+    farm.owner = bob.id
+    farm.soldiers = 40
+    farm.buildings = [BuildingKind.FARM, BuildingKind.FORT]
+    state.tile(Coord(x=0, y=0)).soldiers = 200
+
+    order(state, alice, (0, 0), (1, 0))
+    state.end_turn(alice.id)
+
+    assert farm.owner == alice.id
+    assert farm.buildings == []
+    assert "razed a farm and a fort" in state.game.log[-1]
+
+
+def test_a_wiped_player_loses_their_buildings(game):
+    state, alice, bob = game
+    capital = state.tile(Coord(x=19, y=19))
+    capital.kind = TileKind.WATER
+    capital.buildings = [BuildingKind.FARM]
+    state.end_turn(alice.id)
+    assert bob.eliminated
+    assert capital.buildings == []
+

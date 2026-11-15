@@ -98,6 +98,33 @@ def test_a_small_board_can_be_chosen_at_the_start(client):
         assert game["tiles"][9][9]["owner"] == game["players"][1]["id"]
 
 
+def test_the_map_can_be_chosen_and_rolled_before_the_start(client):
+    with client.websocket_connect("/ws") as alice, client.websocket_connect("/ws") as bob:
+        receive_until(alice, "CONNECT_SUCCESS")
+        receive_until(bob, "CONNECT_SUCCESS")
+        alice.send_json({"type": "JOIN", "data": {"name": "alice", "color": "red"}})
+        receive_until(alice, "JOIN_SUCCESS")
+        bob.send_json({"type": "JOIN", "data": {"name": "bob", "color": "blue"}})
+        receive_until(bob, "JOIN_SUCCESS")
+
+        alice.send_json({"type": "MAP", "data": {"size": 10}})
+        game = wait_game(bob, lambda state: state["size"] == 10)
+        assert len(game["tiles"]) == 10
+        assert game["started"] is False
+        shown = game["tiles"]
+
+        alice.send_json({"type": "MAP", "data": {"size": 10}})
+        rolled = wait_game(bob, lambda state: state["tiles"] != shown)
+        assert len(rolled["tiles"]) == 10
+
+        alice.send_json({"type": "START", "data": {"size": 10}})
+        game = wait_game(alice, lambda state: state["started"])
+        assert game["size"] == 10
+
+        alice.send_json({"type": "MAP", "data": {"size": 20}})
+        assert "already in play" in receive_until(alice, "ERROR")["data"]["message"]
+
+
 def test_a_player_takes_their_seat_back(client):
     with client.websocket_connect("/ws") as alice:
         receive_until(alice, "CONNECT_SUCCESS")
@@ -142,6 +169,33 @@ def test_a_standing_order_comes_back_every_round(client):
         alice.send_json({"type": "CANCEL", "data": {"source": {"x": 0, "y": 0}}})
         game = wait_game(bob, lambda state: not state["orders"])
         assert game["orders"] == []
+
+
+def test_a_farm_can_be_built_over_the_socket(client):
+    with client.websocket_connect("/ws") as alice, client.websocket_connect("/ws") as bob:
+        receive_until(alice, "CONNECT_SUCCESS")
+        receive_until(bob, "CONNECT_SUCCESS")
+        alice.send_json({"type": "JOIN", "data": {"name": "alice", "color": "red"}})
+        receive_until(alice, "JOIN_SUCCESS")
+        bob.send_json({"type": "JOIN", "data": {"name": "bob", "color": "blue"}})
+        receive_until(bob, "JOIN_SUCCESS")
+        alice.send_json({"type": "START"})
+        wait_game(alice, lambda state: state["started"])
+
+        alice.send_json(
+            {"type": "BUILD", "data": {"source": {"x": 0, "y": 0}, "building": "farm"}}
+        )
+        assert "costs 250" in receive_until(alice, "ERROR")["data"]["message"]
+
+        alice.send_json(
+            {"type": "BUILD", "data": {"source": {"x": 0, "y": 0}, "building": "tower"}}
+        )
+        assert "made no sense" in receive_until(alice, "ERROR")["data"]["message"]
+
+        bob.send_json(
+            {"type": "BUILD", "data": {"source": {"x": 19, "y": 19}, "building": "fort"}}
+        )
+        assert "not your turn" in receive_until(bob, "ERROR")["data"]["message"]
 
 
 def test_reset_clears_the_table(client):

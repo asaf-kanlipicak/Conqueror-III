@@ -1,4 +1,4 @@
-# Conqueror III — Rules (v0.3)
+# Conqueror III — Rules (v0.4)
 
 A turn-based tile war game for 2–4 players. Every tile holds soldiers; you either move them into
 your own land or send them against someone else's.
@@ -9,17 +9,19 @@ your own land or send them against someone else's.
   cross-shaped river into four quadrants.
 - **Land** can be owned. **Water** can only be occupied: it starts empty, never holds a neutral
   garrison, and is never territory — a water tile emptied of soldiers is nobody's again.
-- **Neutral land** ("bots") is scattered across the map: a small garrison sitting on a pile of loot.
+- **Neutral land** ("bots") is scattered across the map: a garrison sitting on a pile of loot. The
+  garrison grows the further a tile sits from the corner — cheapest next to your capital, strongest
+  on the bank of the river — with a little noise so no two rings read the same.
 - Each player starts with a capital in one corner, and nothing else.
 - Moves and attacks are orthogonal only — no diagonals.
 
 ## Tiles
 
-| kind         | owner    | soldiers           | production | loot            |
-| ------------ | -------- | ------------------ | ---------- | --------------- |
-| player land  | player   | yes                | yes        | –               |
-| neutral land | none     | garrison           | –          | yes, on capture |
-| water        | none     | whoever moved in   | –          | none            |
+| kind         | owner    | soldiers           | production | loot                |
+| ------------ | -------- | ------------------ | ---------- | ------------------- |
+| player land  | player   | yes                | yes        | –                   |
+| neutral land | none     | garrison           | –          | half the map's garrison |
+| water        | none     | whoever moved in   | –          | none                |
 
 A tile with 0 soldiers is empty: walking into it needs no roll and costs nothing.
 
@@ -62,6 +64,10 @@ included: a line of them walks its soldiers forward one tile a round, not all at
 One roll decides the exchange. `a` = your soldiers on the source tile, `b` = soldiers on the target.
 You win with probability `a / (a + b)`.
 
+A **fort** makes the tile fight as if it held twice the soldiers: `b` becomes `2b` for the roll and
+for the losses, but not for whether the tile falls. So an equal stack has a one-in-three chance, and
+can take the tile outright if the roll lands.
+
 | outcome  | attacker loses     | defender loses     |
 | -------- | ------------------ | ------------------ |
 | you win  | `⌊a·b / (2(a+b))⌋` | `min(a, b)`        |
@@ -80,8 +86,26 @@ You win with probability `a / (a + b)`.
 
 - **Production**: every land tile you own produces a fixed number of soldiers at the start of each
   round, for all players simultaneously.
-- **Loot**: neutral tiles carry a fixed amount, collected by whoever captures them. A neutral tile
-  is worth ten turns of a single tile's production.
+- **Loot**: every neutral tile carries a pile fixed when the map is made — half the garrison it was
+  built with — and whoever captures the tile takes it. Wearing a tile down over several attacks does
+  not shrink the pile; the reward grows with the ring, so a soft tile pays a little and a river bank
+  pays a lot.
+- **Gold**: taking a bot tile also seizes a flat sum of gold. It is the only source, so gold is an
+  early-game resource — once the neutral land is gone, nothing new is minted.
+
+## Buildings
+
+Gold buys buildings, on your own land, on your own turn, 250 apiece.
+
+| building | effect                                                        |
+| -------- | ------------------------------------------------------------- |
+| farm     | +25 soldiers on that tile every round, on top of production   |
+| fort     | the tile defends as if it held twice the soldiers             |
+
+- A tile can hold both, but gold is scarce enough that most tiles hold neither.
+- Buildings are **razed** when the tile changes hands, and when an owner is wiped out. Taking a
+  developed tile denies it to the enemy rather than inheriting it.
+- No building on water.
 
 ## Feedback
 
@@ -102,17 +126,21 @@ Last player with land tiles wins.
 
 ## Starting constants (all tunable)
 
-| constant                 | value      |
-| ------------------------ | ---------- |
+| constant                 | value        |
+| ------------------------ | ------------ |
 | board                    | 10×10, 20×20 |
-| river width              | 2          |
-| production per land tile | 10/turn    |
-| loot per neutral tile    | 100        |
-| capital garrison         | 200        |
-| neutral garrison         | 0, 50–150  |
-| players                  | 2–4        |
+| river width              | 2            |
+| production per land tile | 10/turn      |
+| loot per neutral tile    | half the garrison |
+| gold per bot tile        | 100          |
+| building cost            | 250          |
+| farm bonus               | +25/turn     |
+| fort defence             | ×2           |
+| capital garrison         | 200          |
+| neutral garrison         | 80–320, ±10% |
+| players                  | 2–4          |
 
 ## Not in v1
 
-Docks, ships, naval combat, AI opponents, buildings, resources, fog of war, partial transfers,
+Docks, ships, naval combat, AI opponents, tech trees, unit types, fog of war, partial transfers,
 extra win conditions.

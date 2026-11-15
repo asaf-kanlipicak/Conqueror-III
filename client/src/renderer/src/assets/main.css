@@ -42,8 +42,17 @@ input {
 
 .app {
   display: grid;
-  grid-template-columns: minmax(0, 1fr) 440px;
+  grid-template-columns: 210px minmax(0, 1fr) 440px;
   height: 100vh;
+}
+
+.rail {
+  min-height: 0;
+  overflow-y: auto;
+  border-right: 1px solid var(--ink);
+  background: var(--paper-deep);
+  scrollbar-width: thin;
+  scrollbar-color: var(--rule) transparent;
 }
 
 .stage {
@@ -182,6 +191,24 @@ input {
   box-shadow: inset 0 0 0 1px rgba(38, 34, 28, 0.55);
 }
 
+.tile.fort::after {
+  content: '';
+  position: absolute;
+  inset: 2px;
+  padding: 5px;
+  background: repeating-conic-gradient(currentColor 0 25%, transparent 0 50%) 0 0 / 10px 10px;
+  opacity: 0.65;
+  pointer-events: none;
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask-composite: exclude;
+}
+
+.tile.fort.d4 span {
+  font-size: 10.5px;
+}
+
 .orders {
   position: absolute;
   inset: 0;
@@ -298,7 +325,7 @@ input {
 .roster-head,
 .roster-row {
   display: grid;
-  grid-template-columns: 14px minmax(0, 1fr) 40px 72px;
+  grid-template-columns: 14px minmax(0, 1fr) 34px 62px 48px;
   gap: 10px;
   align-items: center;
 }
@@ -472,7 +499,7 @@ input {
 .sizes {
   display: flex;
   gap: 8px;
-  margin-bottom: 16px;
+  margin-bottom: 12px;
 }
 
 .size {
@@ -496,6 +523,54 @@ input {
 .size.picked {
   border-color: var(--ink);
   color: var(--ink);
+}
+
+.roll {
+  margin-bottom: 16px;
+}
+
+.facts {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: 5px 10px;
+  margin: 0 0 18px;
+  font-size: 13px;
+}
+
+.facts dt {
+  align-self: center;
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+}
+
+.facts dd {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  overflow-wrap: anywhere;
+  font-family: var(--font-mono);
+  font-size: 13px;
+}
+
+.facts .chip {
+  flex: none;
+  width: 10px;
+  height: 10px;
+}
+
+.builds {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.builds .btn {
+  padding: 10px 8px;
+  font-size: 11px;
+  letter-spacing: 0.1em;
 }
 
 .order-head {

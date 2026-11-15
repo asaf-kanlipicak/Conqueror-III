@@ -1,14 +1,35 @@
+import { useState } from 'react'
 import { Board } from './components/Board'
 import { Chat } from './components/Chat'
 import { Elapsed } from './components/Elapsed'
+import { Inspector } from './components/Inspector'
 import { Lobby } from './components/Lobby'
 import { LogFeed } from './components/LogFeed'
 import { Roster } from './components/Roster'
 import { TurnPanel } from './components/TurnPanel'
 import { useGame } from './hooks/useGame'
+import { Coord } from './types/schema'
 
 function App() {
-  const { game, myId, me, myTurn, orders, error, status, join, start, reset, order, cancel, chat, endTurn } = useGame()
+  const {
+    game,
+    myId,
+    me,
+    myTurn,
+    orders,
+    error,
+    status,
+    join,
+    start,
+    shape,
+    reset,
+    order,
+    cancel,
+    build,
+    chat,
+    endTurn
+  } = useGame()
+  const [picked, setPicked] = useState<Coord | null>(null)
 
   if (!game) {
     return (
@@ -20,6 +41,10 @@ function App() {
 
   return (
     <main className="app">
+      <aside className="rail">
+        <Inspector game={game} myId={myId} picked={picked} myTurn={myTurn} onBuild={build} />
+      </aside>
+
       <section className="stage">
         <div className="sheet">
           <header className="masthead">
@@ -30,7 +55,14 @@ function App() {
             </div>
           </header>
 
-          <Board key={game.started_at ?? 'lobby'} game={game} myId={myId} onOrder={order} onCancel={cancel} />
+          <Board
+            key={`${game.started_at ?? 'lobby'}:${game.size}`}
+            game={game}
+            myId={myId}
+            onOrder={order}
+            onCancel={cancel}
+            onPick={setPicked}
+          />
 
           {error && <p className="notice">{error}</p>}
           {status !== 'live' && <p className="notice">connection lost, coming back…</p>}
@@ -39,7 +71,7 @@ function App() {
 
       <aside className="side">
         <Roster game={game} myId={myId} />
-        <Lobby game={game} myId={myId} onJoin={join} onStart={start} />
+        <Lobby game={game} myId={myId} onJoin={join} onStart={start} onShape={shape} />
         <TurnPanel
           game={game}
           myId={myId}

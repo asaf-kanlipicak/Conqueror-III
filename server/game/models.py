@@ -1,7 +1,7 @@
 from pydantic import BaseModel, Field
 
 from game.constants import BOARD_SIZE
-from game.enums import PlayerColor, TileKind
+from game.enums import BuildingKind, PlayerColor, TileKind
 
 
 class Coord(BaseModel):
@@ -15,12 +15,15 @@ class Player(BaseModel):
     color: PlayerColor
     eliminated: bool = False
     online: bool = True
+    gold: int = 0
 
 
 class Tile(BaseModel):
     kind: TileKind = TileKind.LAND
     owner: str | None = None
     soldiers: int = 0
+    loot: int = 0
+    buildings: list[BuildingKind] = []
 
 
 class PendingOrder(BaseModel):

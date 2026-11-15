@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { API_BASE_URL } from '../config'
 import { playChime, playClick, shouldChime, shouldClickChat } from '../lib/chime'
 import {
+  BuildingKind,
   CommandType,
   Coord,
   ErrorData,
@@ -27,9 +28,11 @@ export interface GameSession {
   status: 'connecting' | 'live' | 'offline'
   join: (name: string, color: PlayerColor) => void
   start: (size: number) => void
+  shape: (size: number) => void
   reset: () => void
   order: (source: Coord, target: Coord, repeat?: boolean) => void
   cancel: (source: Coord) => void
+  build: (source: Coord, building: BuildingKind) => void
   chat: (text: string) => void
   endTurn: () => void
 }
@@ -150,6 +153,7 @@ export function useGame(): GameSession {
 
   const join = useCallback((name: string, color: PlayerColor) => send(CommandType.JOIN, { name, color }), [send])
   const start = useCallback((size: number) => send(CommandType.START, { size }), [send])
+  const shape = useCallback((size: number) => send(CommandType.MAP, { size }), [send])
   const reset = useCallback(() => send(CommandType.RESET), [send])
   const order = useCallback(
     (source: Coord, target: Coord, repeat?: boolean) =>
@@ -157,6 +161,10 @@ export function useGame(): GameSession {
     [send]
   )
   const cancel = useCallback((source: Coord) => send(CommandType.CANCEL, { source }), [send])
+  const build = useCallback(
+    (source: Coord, building: BuildingKind) => send(CommandType.BUILD, { source, building }),
+    [send]
+  )
   const chat = useCallback((text: string) => send(CommandType.CHAT, { text }), [send])
   const endTurn = useCallback(() => send(CommandType.END_TURN), [send])
 
@@ -170,9 +178,11 @@ export function useGame(): GameSession {
     status,
     join,
     start,
+    shape,
     reset,
     order,
     cancel,
+    build,
     chat,
     endTurn
   }
