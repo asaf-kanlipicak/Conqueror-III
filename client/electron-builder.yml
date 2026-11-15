@@ -28,10 +28,14 @@ linux:
   target:
     - AppImage
     - rpm
+    - deb
   maintainer: Asaf31214
   vendor: Asaf31214
   category: Game
 rpm:
+  afterInstall: build/after-install.sh
+  afterRemove: build/after-remove.sh
+deb:
   afterInstall: build/after-install.sh
   afterRemove: build/after-remove.sh
 appImage:
