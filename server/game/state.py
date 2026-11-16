@@ -14,7 +14,9 @@ from game.constants import (
     CHAT_MAX,
     FARM_BONUS,
     FORT_DEFENSE,
+    GOLD_INTEREST,
     GOLD_PER_BOT,
+    INTEREST_CAP,
     LOG_LIMIT,
     NEUTRAL_MAX,
     NEUTRAL_MIN,
@@ -145,6 +147,13 @@ class State:
         self._log(f"{player.name} joined as {player.color}")
         return player
 
+    def kick(self, player_id: str) -> None:
+        if self.game.started:
+            raise StateError("the game has already started")
+        player = self.player(player_id)
+        self.game.players.remove(player)
+        self._log(f"{player.name} left the table")
+
     def resume(self, player_id: str) -> Player:
         player = self.player(player_id)
         player.online = True
@@ -169,6 +178,9 @@ class State:
             return
         self._log(f"{player.name} dropped out, turn skipped")
         self._next_turn()
+
+    def is_seated(self, player_id: str) -> bool:
+        return self._find(player_id) is not None
 
     def is_online(self, player_id: str) -> bool:
         player = self._find(player_id)
@@ -221,10 +233,11 @@ class State:
             raise StateError("that tile has no soldiers")
         if abs(source.x - target.x) + abs(source.y - target.y) != 1:
             raise StateError("those tiles are not adjacent")
-        self.tile(target)
+        target_tile = self.tile(target)
         previous = next((order for order in self.game.orders if order.source == source), None)
         if repeat is None:
-            repeat = previous.repeat if previous else False
+            unchanged = previous is not None and previous.target == target
+            repeat = previous.repeat if unchanged else target_tile.owner == player.id
         self.game.orders = [order for order in self.game.orders if order.source != source]
         self.game.orders.append(
             PendingOrder(
@@ -274,7 +287,7 @@ class State:
             self.game.orders = [order for order in self.game.orders if order.player != player.id]
             plan = bot.think(self.game, player)
             for order in plan.orders:
-                self.add_order(player.id, order.source, order.target)
+                self.add_order(player.id, order.source, order.target, repeat=False)
             if current is not None and current.id == player.id:
                 for coord, building in plan.builds:
                     self._raise(player, coord, building)
@@ -451,6 +464,8 @@ class State:
             return
 
     def _produce(self) -> None:
+        for player in self.game.players:
+            player.gold += min(int(player.gold * GOLD_INTEREST), INTEREST_CAP)
         for row in self.game.tiles:
             for tile in row:
                 if tile.kind != TileKind.LAND or tile.owner is None:

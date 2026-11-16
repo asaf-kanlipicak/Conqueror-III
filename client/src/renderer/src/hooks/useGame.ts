@@ -31,6 +31,7 @@ export interface GameSession {
   shape: (size: number) => void
   reset: () => void
   addBot: () => void
+  kick: (seat: string) => void
   order: (source: Coord, target: Coord, repeat?: boolean) => void
   cancel: (source: Coord) => void
   build: (source: Coord, building: BuildingKind) => void
@@ -157,6 +158,7 @@ export function useGame(): GameSession {
   const shape = useCallback((size: number) => send(CommandType.MAP, { size }), [send])
   const reset = useCallback(() => send(CommandType.RESET), [send])
   const addBot = useCallback(() => send(CommandType.BOT), [send])
+  const kick = useCallback((seat: string) => send(CommandType.KICK, { seat }), [send])
   const order = useCallback(
     (source: Coord, target: Coord, repeat?: boolean) =>
       send(CommandType.MOVE, repeat === undefined ? { source, target } : { source, target, repeat }),
@@ -183,6 +185,7 @@ export function useGame(): GameSession {
     shape,
     reset,
     addBot,
+    kick,
     order,
     cancel,
     build,

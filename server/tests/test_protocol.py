@@ -1,3 +1,5 @@
+import random
+
 import pytest
 from fastapi.testclient import TestClient
 
@@ -200,7 +202,8 @@ def test_a_farm_can_be_built_over_the_socket(client):
         assert "not your turn" in receive_until(bob, "ERROR")["data"]["message"]
 
 
-def test_a_bot_is_seated_and_plays_its_turn(client):
+def test_a_bot_is_seated_and_plays_its_turn(client, monkeypatch):
+    monkeypatch.setattr(random, "random", lambda: 0.0)
     with client.websocket_connect("/ws") as alice:
         receive_until(alice, "CONNECT_SUCCESS")
         alice.send_json({"type": "JOIN", "data": {"name": "alice", "color": "red"}})
@@ -218,6 +221,101 @@ def test_a_bot_is_seated_and_plays_its_turn(client):
         game = wait_game(alice, lambda state: state["round"] == 2 and state["turn"] == 0)
         assert game["players"][1]["bot"] is True
         assert any(order["player"] == game["players"][1]["id"] for order in game["orders"])
+
+
+def test_an_all_bot_game_can_be_reset_while_it_runs(client):
+    with client.websocket_connect("/ws") as me:
+        receive_until(me, "CONNECT_SUCCESS")
+        me.send_json({"type": "BOT"})
+        me.send_json({"type": "BOT"})
+        me.send_json({"type": "START", "data": {"size": 10}})
+        wait_game(me, lambda state: state["started"])
+
+        me.send_json({"type": "RESET"})
+        game = wait_game(me, lambda state: not state["started"])
+
+        assert game["players"] == []
+        assert game["started"] is False
+
+
+def test_an_all_bot_game_can_change_the_map_while_it_runs(client):
+    with client.websocket_connect("/ws") as me:
+        receive_until(me, "CONNECT_SUCCESS")
+        me.send_json({"type": "BOT"})
+        me.send_json({"type": "BOT"})
+        me.send_json({"type": "START", "data": {"size": 10}})
+        wait_game(me, lambda state: state["started"])
+
+        me.send_json({"type": "RESET"})
+        wait_game(me, lambda state: not state["started"])
+        me.send_json({"type": "MAP", "data": {"size": 20}})
+
+        game = wait_game(me, lambda state: len(state["tiles"]) == 20)
+        assert game["size"] == 20
+
+
+def test_a_seat_can_be_cleared_over_the_wire(client):
+    with client.websocket_connect("/ws") as me:
+        receive_until(me, "CONNECT_SUCCESS")
+        me.send_json({"type": "BOT"})
+        game = wait_game(me, lambda state: len(state["players"]) == 1)
+        seated = game["players"][0]["id"]
+
+        me.send_json({"type": "KICK", "data": {"seat": seated}})
+        game = wait_game(me, lambda state: not state["players"])
+
+        assert game["players"] == []
+
+
+def test_a_kicked_player_can_still_shape_the_map(client):
+    with client.websocket_connect("/ws") as alice, client.websocket_connect("/ws") as bob:
+        receive_until(alice, "CONNECT_SUCCESS")
+        receive_until(bob, "CONNECT_SUCCESS")
+        alice.send_json({"type": "JOIN", "data": {"name": "alice", "color": "red"}})
+        seat = receive_until(alice, "JOIN_SUCCESS")["data"]["id"]
+        wait_game(bob, lambda state: len(state["players"]) == 1)
+
+        bob.send_json({"type": "KICK", "data": {"seat": seat}})
+        wait_game(bob, lambda state: not state["players"])
+
+        alice.send_json({"type": "MAP", "data": {"size": 10}})
+        game = wait_game(alice, lambda state: len(state["tiles"]) == 10)
+
+        assert game["size"] == 10
+
+
+def test_a_reset_player_can_still_shape_the_map(client):
+    with client.websocket_connect("/ws") as alice:
+        receive_until(alice, "CONNECT_SUCCESS")
+        alice.send_json({"type": "JOIN", "data": {"name": "alice", "color": "red"}})
+        receive_until(alice, "JOIN_SUCCESS")
+
+        alice.send_json({"type": "RESET"})
+        wait_game(alice, lambda state: not state["players"])
+
+        alice.send_json({"type": "MAP", "data": {"size": 10}})
+        game = wait_game(alice, lambda state: len(state["tiles"]) == 10)
+
+        assert game["size"] == 10
+
+
+def test_a_kicked_player_cannot_order_any_more(client):
+    with client.websocket_connect("/ws") as alice, client.websocket_connect("/ws") as bob:
+        receive_until(alice, "CONNECT_SUCCESS")
+        receive_until(bob, "CONNECT_SUCCESS")
+        alice.send_json({"type": "JOIN", "data": {"name": "alice", "color": "red"}})
+        seat = receive_until(alice, "JOIN_SUCCESS")["data"]["id"]
+        bob.send_json({"type": "JOIN", "data": {"name": "bob", "color": "blue"}})
+        receive_until(bob, "JOIN_SUCCESS")
+        wait_game(alice, lambda state: len(state["players"]) == 2)
+
+        bob.send_json({"type": "KICK", "data": {"seat": seat}})
+        wait_game(bob, lambda state: len(state["players"]) == 1)
+
+        alice.send_json(
+            {"type": "MOVE", "data": {"source": {"x": 0, "y": 0}, "target": {"x": 1, "y": 0}}}
+        )
+        assert "join the game first" in receive_until(alice, "ERROR")["data"]["message"]
 
 
 def test_reset_clears_the_table(client):

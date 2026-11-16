@@ -30,6 +30,7 @@ export enum CommandType {
   CHAT = 'CHAT',
   END_TURN = 'END_TURN',
   BOT = 'BOT',
+  KICK = 'KICK',
   RESET = 'RESET'
 }
 

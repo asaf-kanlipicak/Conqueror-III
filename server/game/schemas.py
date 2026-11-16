@@ -37,6 +37,10 @@ class ResumeData(Data):
     player_id: str
 
 
+class KickData(Data):
+    seat: str
+
+
 class ChatData(Data):
     text: str
 

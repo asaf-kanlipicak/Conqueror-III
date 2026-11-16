@@ -1,7 +1,14 @@
+import random
 from collections import deque
 from dataclasses import dataclass, field
 
-from game.constants import BOT_FARM_FLOOR, BOT_FORT_RATIO, BUILDING_COST, FORT_DEFENSE
+from game.constants import (
+    BOT_FARM_FLOOR,
+    BOT_FORT_FLOOR,
+    BOT_FORT_RATIO,
+    BUILDING_COST,
+    FORT_DEFENSE,
+)
 from game.enums import BuildingKind, TileKind
 from game.models import Coord, Game, PendingOrder, Player, Tile
 
@@ -100,18 +107,27 @@ def _distances(game: Game, me: str) -> list[list[int]]:
 
 
 def _strike(game: Game, me: str, x: int, y: int, soldiers: int) -> Coord | None:
-    best = None
+    targets = []
     for nx, ny in _around(x, y, game.size):
         tile = game.tiles[ny][nx]
-        if not _target(tile, me):
-            continue
-        guard = _guard(tile)
-        if soldiers < guard:
-            continue
-        key = (guard, -tile.loot, ny, nx)
-        if best is None or key < best[0]:
-            best = (key, Coord(x=nx, y=ny))
-    return best[1] if best else None
+        if _target(tile, me):
+            targets.append((_guard(tile), -tile.loot, ny, nx))
+    if not targets:
+        return None
+    targets.sort()
+    chances = [soldiers / (soldiers + guard) for guard, _, _, _ in targets]
+    best = max(chances)
+    roll = random.random()
+    if roll >= best:
+        return None
+    pick = roll / best * sum(chances)
+    chosen = targets[-1]
+    for target, chance in zip(targets, chances):
+        pick -= chance
+        if pick < 0:
+            chosen = target
+            break
+    return Coord(x=chosen[3], y=chosen[2])
 
 
 def _step(dist: list[list[int]], x: int, y: int, size: int) -> tuple[int, int] | None:
@@ -127,7 +143,7 @@ def _step(dist: list[list[int]], x: int, y: int, size: int) -> tuple[int, int] |
 
 
 def _fort(game: Game, me: str, held: list[tuple[int, int]], gold: int) -> Coord | None:
-    if gold < BUILDING_COST:
+    if gold < BOT_FORT_FLOOR:
         return None
     best = None
     for x, y in held:

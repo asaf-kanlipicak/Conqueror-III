@@ -1,4 +1,4 @@
-# Conqueror III — Rules (v0.4)
+# Conqueror III — Rules (v0.5)
 
 A turn-based tile war game for 2–4 players. Every tile holds soldiers; you either move them into
 your own land or send them against someone else's.
@@ -31,6 +31,8 @@ A tile with 0 soldiers is empty: walking into it needs no roll and costs nothing
 - Seats are taken in this order: top-left, bottom-right, top-right, bottom-left.
 - Anyone can start the game once at least two have joined — seated or not, which is how a table of
   bots gets going.
+- A seat can be cleared before the start, by anyone, including your own. The name and colour go back
+  into the pool.
 - A player with no land tiles left is out, and their soldiers still on water vanish. Soldiers on
   water never count as territory.
 - A player whose connection drops keeps their tiles and soldiers. Queued orders that were never
@@ -52,9 +54,13 @@ A tile with 0 soldiers is empty: walking into it needs no roll and costs nothing
 5. An order can be set to **stand**: it stays on its tile and runs again at the start of every one of
    your turns, carrying whatever the tile holds at that moment. That is how a supply line is kept
    running without re-issuing it. A standing order dies with its tile, like any other.
-6. End Turn: orders resolve one by one in the order you issued them, each rolling when it resolves.
+6. A **move** stands by default and an **attack** does not. Feeding your own land is the thing you
+   want repeating — a tile's production keeps flowing down the line — while an attack is a one-off
+   unless you deliberately make it a siege. Pointing an order at a different neighbour gives it that
+   neighbour's default; leaving it alone keeps whatever you set.
+7. End Turn: orders resolve one by one in the order you issued them, each rolling when it resolves.
    If a tile has become yours by the time a later order resolves, that order is just a transfer.
-7. Production happens at the start of every round, for all players at once — including one round
+8. Production happens at the start of every round, for all players at once — including one round
    before the first turn. Turn order is join order.
 
 Because a tile acts once per turn, a stack moves at most one tile per turn — standing orders
@@ -91,8 +97,12 @@ can take the tile outright if the roll lands.
   built with — and whoever captures the tile takes it. Wearing a tile down over several attacks does
   not shrink the pile; the reward grows with the ring, so a soft tile pays a little and a river bank
   pays a lot.
-- **Gold**: taking a bot tile also seizes a flat sum of gold. It is the only source, so gold is an
-  early-game resource — once the neutral land is gone, nothing new is minted.
+- **Gold**: taking a bot tile also seizes a flat sum of gold. It is the only way to *earn* gold, so
+  the early game is where the money is — once the neutral land is gone, nothing new is minted.
+- **Interest**: whatever gold you are still holding pays 5% at the start of every round, capped at
+  250. So a full treasury is not dead weight: sitting on it is a slow income, and spending it on a
+  building is a bet that the building earns its keep sooner. It also means the gold column keeps
+  moving in a long game, when there are no bots left to take it from.
 
 ## Buildings
 
@@ -134,21 +144,29 @@ the humans are playing.
 The plan is a flow field. Every tile the bot does not own is a target; a breadth-first search over
 land and water gives every tile its distance to the nearest one. Then, for each of the bot's tiles:
 
-- adjacent to a target and strong enough to break even (`soldiers ≥ guard`, so a win captures) —
-  attack the cheapest neighbour, preferring the richer pile on a tie
-- adjacent to a target but outgunned — hold, and let the field feed it
+- adjacent to a target — it may strike. Against each neighbour it works out its win chance
+  `a / (a + guard)`, takes the best of them as its confidence, and rolls. A roll above that
+  confidence means it holds and lets the field feed it; otherwise it picks a neighbour, weighted by
+  those same chances, and attacks it
 - otherwise — send everything one step down the field
+
+So a tile at even odds attacks half the time, one at two to one about two thirds, and a tile facing
+nothing better than a third attacks a third of the time. The same roll covers a hopeless case, so a
+desperate push is possible but rare. It is not a decision about whether the attack is *wise*; it is
+a decision about whether the bot feels lucky, which is what keeps two equal armies from standing
+next to each other forever.
 
 Because the flow only ever moves downhill, a stack walks one tile a turn and no two tiles swap. Open
 water is part of the field, so a bot crosses the river the way it crosses land: one tile at a time,
 with a stack that has to survive the crossing.
 
-Gold follows one rule: **keep 250 in hand**, spend the rest.
+Gold follows one rule: **never spend down to nothing**, keep a margin above the price, spend the rest.
 
 - A **fort** goes on a holding tile next to an enemy player, while the enemy could still be held at
-  twice the garrison (`sum of adjacent enemy stacks ≤ 2 × garrison`). Holding tiles are the only ones
-  the flow does not drain — anywhere else a fort would be left standing on an empty tile.
-- A **farm** goes on the deepest tile the bot owns, and only once gold reaches 500. Spend at 250 and
+  twice the garrison (`sum of adjacent enemy stacks ≤ 2 × garrison`), and only with 300 in hand.
+  Holding tiles are the only ones the flow does not drain — anywhere else a fort would be left
+  standing on an empty tile.
+- A **farm** goes on the deepest tile the bot owns, and only once gold reaches 550. Spend at 250 and
   the bot would never have the coin for a fort when it finally needed one.
 
 A bot's turn is announced, then played a second later, so the table sees the plan before it resolves.
@@ -162,6 +180,7 @@ A bot's turn is announced, then played a second later, so the table sees the pla
 | production per land tile | 10/turn      |
 | loot per neutral tile    | half the garrison |
 | gold per bot tile        | 100          |
+| interest on held gold    | 5%/round, 250 cap |
 | building cost            | 250          |
 | farm bonus               | +25/turn     |
 | fort defence             | ×2           |

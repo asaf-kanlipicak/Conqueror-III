@@ -36,9 +36,13 @@ async def websocket_endpoint(websocket: WebSocket):
         )
         while True:
             raw = await websocket.receive_json()
+            player_id = sessions.get(websocket)
+            if player_id is not None and not dispatcher.state.is_seated(player_id):
+                sessions.pop(websocket, None)
+                player_id = None
             try:
                 command = Command(**raw)
-                result = await dispatcher.dispatch_command(sessions.get(websocket), command)
+                result = await dispatcher.dispatch_command(player_id, command)
             except ValidationError:
                 result = Result(
                     type=ResultType.ERROR, data=ErrorData(message="that command made no sense")

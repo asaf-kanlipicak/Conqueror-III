@@ -3,13 +3,16 @@ from math import ceil
 
 import pytest
 
+from game import state as state_module
 from game.constants import (
     BUILDING_COST,
     CAPITAL_GARRISON,
     CHAT_LIMIT,
     CHAT_MAX,
     FARM_BONUS,
+    GOLD_INTEREST,
     GOLD_PER_BOT,
+    INTEREST_CAP,
     NEUTRAL_MAX,
     NEUTRAL_MIN,
     NEUTRAL_SPREAD,
@@ -776,9 +779,47 @@ def test_a_repeat_can_be_turned_on_and_off(game):
     order(state, alice, (0, 0), (1, 0), repeat=True)
     assert len(state.game.orders) == 1
     assert state.game.orders[0].repeat is True
+    order(state, alice, (0, 0), (1, 0))
+    assert state.game.orders[0].repeat is True
+    order(state, alice, (0, 0), (1, 0), repeat=False)
+    assert state.game.orders[0].repeat is False
+
+
+def test_a_move_stands_by_default(game):
+    state, alice, _ = game
+    state.tile(Coord(x=0, y=1)).owner = alice.id
+
+    order(state, alice, (0, 0), (0, 1))
+
+    assert state.game.orders[0].repeat is True
+
+
+def test_an_attack_is_one_shot_by_default(game):
+    state, alice, _ = game
+
+    order(state, alice, (0, 0), (1, 0))
+
+    assert state.game.orders[0].repeat is False
+
+
+def test_a_redirect_takes_the_new_default(game):
+    state, alice, _ = game
+    state.tile(Coord(x=0, y=1)).owner = alice.id
     order(state, alice, (0, 0), (0, 1))
     assert state.game.orders[0].repeat is True
+
+    order(state, alice, (0, 0), (1, 0))
+
+    assert state.game.orders[0].repeat is False
+
+
+def test_an_unchanged_order_keeps_its_flag(game):
+    state, alice, _ = game
+    state.tile(Coord(x=0, y=1)).owner = alice.id
     order(state, alice, (0, 0), (0, 1), repeat=False)
+
+    order(state, alice, (0, 0), (0, 1))
+
     assert state.game.orders[0].repeat is False
 
 
@@ -866,6 +907,7 @@ def test_every_neutral_tile_holds_a_garrison(monkeypatch):
 def test_gold_comes_only_from_bot_land(game, monkeypatch):
     state, alice, bob = game
     monkeypatch.setattr(random, "random", lambda: 0.0)
+    monkeypatch.setattr(state_module, "GOLD_INTEREST", 0)
     assert alice.gold == 0
 
     bot = state.tile(Coord(x=1, y=0))
@@ -901,6 +943,46 @@ def test_water_pays_no_gold(game, monkeypatch):
     state.end_turn(alice.id)
     assert pond.owner == alice.id
     assert alice.gold == 0
+
+
+def test_gold_earns_interest_every_round(game):
+    state, alice, bob = game
+    alice.gold = 1000
+
+    state.end_turn(alice.id)
+    state.end_turn(bob.id)
+
+    assert alice.gold == 1000 + int(1000 * GOLD_INTEREST)
+
+
+def test_interest_is_capped(game):
+    state, alice, bob = game
+    alice.gold = INTEREST_CAP * 100
+
+    state.end_turn(alice.id)
+    state.end_turn(bob.id)
+
+    assert alice.gold == INTEREST_CAP * 100 + INTEREST_CAP
+
+
+def test_a_broke_player_earns_nothing(game):
+    state, alice, bob = game
+
+    state.end_turn(alice.id)
+    state.end_turn(bob.id)
+
+    assert alice.gold == 0
+
+
+def test_interest_pays_everyone_at_once(game):
+    state, alice, bob = game
+    alice.gold = 400
+    bob.gold = 400
+
+    state.end_turn(alice.id)
+    state.end_turn(bob.id)
+
+    assert (alice.gold, bob.gold) == (420, 420)
 
 
 def test_a_farm_pays_extra_production(game):

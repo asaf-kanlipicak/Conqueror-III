@@ -17,6 +17,15 @@ def table(monkeypatch, grace: float = 0.0):
     return dispatcher, alice
 
 
+def settle(dispatcher, coro):
+    async def run():
+        await coro
+        if dispatcher.bots is not None:
+            await dispatcher.bots
+
+    asyncio.run(run())
+
+
 def test_a_dropped_player_is_skipped_after_the_grace(monkeypatch):
     dispatcher, alice = table(monkeypatch)
     dispatcher.state.add_order(alice.id, Coord(x=0, y=0), Coord(x=1, y=0))
@@ -63,9 +72,7 @@ def test_a_bot_takes_its_turn(monkeypatch):
     seated = dispatcher.state.add_bot()
     dispatcher.state.start(alice.id, 10)
 
-    asyncio.run(
-        dispatcher.dispatch_end_turn(alice.id, Command(type=CommandType.END_TURN))
-    )
+    settle(dispatcher, dispatcher.dispatch_end_turn(alice.id, Command(type=CommandType.END_TURN)))
 
     assert dispatcher.state.current is not None
     assert dispatcher.state.current.id == alice.id
@@ -92,3 +99,38 @@ def test_a_bot_waits_for_its_turn(monkeypatch):
     assert [[tile.owner for tile in row] for row in dispatcher.state.game.tiles] == before
     assert dispatcher.state.current is not None
     assert dispatcher.state.current.id == alice.id
+
+
+def test_an_all_bot_game_reaches_a_winner(monkeypatch):
+    monkeypatch.setattr(dispatcher_module, "BOT_PAUSE", 0)
+    dispatcher = Dispatcher(Manager())
+    dispatcher.state.add_bot()
+    dispatcher.state.add_bot()
+
+    async def run():
+        await dispatcher.dispatch_start(None, Command(type=CommandType.START, data={"size": 10}))
+        assert dispatcher.bots is not None
+        await dispatcher.bots
+
+    asyncio.run(run())
+
+    assert dispatcher.state.game.winner is not None
+
+
+def test_a_running_bot_game_can_be_reset(monkeypatch):
+    monkeypatch.setattr(dispatcher_module, "BOT_PAUSE", 0)
+    dispatcher = Dispatcher(Manager())
+    dispatcher.state.add_bot()
+    dispatcher.state.add_bot()
+
+    async def run():
+        await dispatcher.dispatch_start(None, Command(type=CommandType.START, data={"size": 10}))
+        await asyncio.sleep(0)
+        await dispatcher.dispatch_reset(None, Command(type=CommandType.RESET))
+        await asyncio.sleep(0)
+
+    asyncio.run(run())
+
+    assert not dispatcher.state.game.started
+    assert dispatcher.state.game.players == []
+    assert dispatcher.bots is None

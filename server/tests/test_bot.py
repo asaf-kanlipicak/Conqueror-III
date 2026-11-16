@@ -3,7 +3,7 @@ import random
 import pytest
 
 from game import bot
-from game.constants import BOT_FARM_FLOOR, BOT_NAMES, BUILDING_COST
+from game.constants import BOT_FARM_FLOOR, BOT_FORT_FLOOR, BOT_NAMES, BUILDING_COST
 from game.enums import BuildingKind, PlayerColor, TileKind
 from game.models import Coord, Tile
 from game.state import State, StateError
@@ -55,45 +55,92 @@ def moves(state, player):
     return {(o.source.x, o.source.y): (o.target.x, o.target.y) for o in plan(state, player).orders}
 
 
-def test_a_frontier_tile_takes_the_cheapest_neighbour():
+def roll(monkeypatch, value):
+    monkeypatch.setattr(random, "random", lambda: value)
+
+
+def test_even_odds_are_taken_half_the_time(monkeypatch):
     state, alice, _ = table()
+    wet(state, 0, 1)
     put(state, alice, 0, 0, 200)
-    state.tile(Coord(x=0, y=1)).soldiers = 150
+    state.tile(Coord(x=1, y=0)).soldiers = 200
 
-    result = plan(state, alice)
+    roll(monkeypatch, 0.49)
+    assert plan(state, alice).orders
 
-    assert [(order.target, order.soldiers) for order in result.orders] == [(Coord(x=1, y=0), 200)]
+    roll(monkeypatch, 0.5)
+    assert plan(state, alice).orders == []
 
 
-def test_a_tie_goes_to_the_richer_pile():
+def test_a_desperate_attack_is_still_on_the_table(monkeypatch):
     state, alice, _ = table()
+    wet(state, 0, 1)
+    put(state, alice, 0, 0, 40)
+    state.tile(Coord(x=1, y=0)).soldiers = 200
+
+    roll(monkeypatch, 0.1)
+    assert plan(state, alice).orders
+
+    roll(monkeypatch, 0.5)
+    assert plan(state, alice).orders == []
+
+
+def test_a_fort_halves_the_odds(monkeypatch):
+    state, alice, bob = table()
+    wet(state, 0, 1)
+    put(state, alice, 0, 0, 200)
+    put(state, bob, 1, 0, 100, BuildingKind.FORT)
+
+    roll(monkeypatch, 0.6)
+    assert plan(state, alice).orders == []
+
+    state.tile(Coord(x=1, y=0)).buildings = []
+
+    assert plan(state, alice).orders
+
+
+def test_a_free_tile_outweighs_a_contested_one(monkeypatch):
+    state, alice, _ = table()
+    put(state, alice, 0, 0, 100)
+    free = state.tile(Coord(x=1, y=0))
+    free.soldiers = 0
+    free.loot = 0
+    state.tile(Coord(x=0, y=1)).soldiers = 100
+
+    roll(monkeypatch, 0.3)
+    assert plan(state, alice).orders[0].target == Coord(x=1, y=0)
+
+    roll(monkeypatch, 0.9)
+    assert plan(state, alice).orders[0].target == Coord(x=0, y=1)
+
+
+def test_a_tie_is_split_by_the_pile(monkeypatch):
+    state, alice, _ = table()
+    wet(state, 1, 1)
     put(state, alice, 1, 0, 200)
     state.tile(Coord(x=0, y=0)).loot = 40
     state.tile(Coord(x=2, y=0)).loot = 60
 
+    roll(monkeypatch, 0.1)
     assert plan(state, alice).orders[0].target == Coord(x=2, y=0)
 
+    roll(monkeypatch, 0.5)
+    assert plan(state, alice).orders[0].target == Coord(x=0, y=0)
 
-def test_a_tile_that_cannot_break_even_holds():
+
+def test_no_neighbour_means_no_strike():
     state, alice, _ = table()
-    put(state, alice, 0, 0, 99)
-
-    assert plan(state, alice).orders == []
-
-
-@pytest.mark.parametrize("soldiers, attacks", [(200, True), (199, False)])
-def test_a_fort_has_to_be_doubled_before_it_is_attacked(soldiers, attacks):
-    state, alice, bob = table()
     wet(state, 0, 1)
-    put(state, alice, 0, 0, soldiers)
-    put(state, bob, 1, 0, 100, BuildingKind.FORT)
+    wet(state, 1, 0)
+    put(state, alice, 0, 0, 100)
 
-    assert bool(plan(state, alice).orders) is attacks
+    assert bot._strike(state.game, alice.id, 0, 0, 100) is None
 
 
-def test_the_back_of_a_block_pushes_forward():
+def test_the_back_of_a_block_pushes_forward(monkeypatch):
     state, alice, _ = table()
     block(state, alice)
+    roll(monkeypatch, 0.0)
 
     flow = moves(state, alice)
 
@@ -111,9 +158,10 @@ def test_the_flow_never_runs_backwards():
         assert dist[order.target.y][order.target.x] < dist[order.source.y][order.source.x]
 
 
-def test_every_tile_acts_once():
+def test_every_tile_acts_once(monkeypatch):
     state, alice, _ = table()
     block(state, alice)
+    roll(monkeypatch, 0.0)
 
     result = plan(state, alice)
 
@@ -135,8 +183,9 @@ def test_open_water_is_a_bridge():
     ]
 
 
-def test_a_stack_on_the_water_can_land():
+def test_a_stack_on_the_water_can_land(monkeypatch):
     state, alice, _ = table()
+    roll(monkeypatch, 0.0)
     state.game.tiles = [[Tile(kind=TileKind.WATER) for _ in range(10)] for _ in range(10)]
     put(state, alice, 0, 0, 100)
     lake = state.tile(Coord(x=1, y=0))
@@ -163,75 +212,83 @@ def test_a_board_with_nothing_left_to_take_is_quiet():
     assert plan(state, alice).orders == []
 
 
-def test_a_fort_goes_up_on_the_tile_that_cannot_push():
+def test_a_fort_goes_up_on_the_tile_that_cannot_push(monkeypatch):
     state, alice, bob = table()
     wet(state, 0, 1)
     put(state, alice, 0, 0, 150)
     put(state, bob, 1, 0, 100, BuildingKind.FORT)
-    alice.gold = BUILDING_COST
+    alice.gold = BOT_FORT_FLOOR
+    roll(monkeypatch, 0.9)
 
     assert plan(state, alice).builds == [(Coord(x=0, y=0), BuildingKind.FORT)]
 
 
-def test_no_fort_when_the_enemy_is_too_strong():
+def test_no_fort_when_the_enemy_is_too_strong(monkeypatch):
     state, alice, bob = table()
     wet(state, 0, 1)
     put(state, alice, 0, 0, 40)
     put(state, bob, 1, 0, 100, BuildingKind.FORT)
-    alice.gold = BUILDING_COST
+    alice.gold = BOT_FORT_FLOOR
+    roll(monkeypatch, 0.9)
 
     assert plan(state, alice).builds == []
 
 
 @pytest.mark.parametrize("garrison, built", [(120, True), (100, False)])
-def test_the_whole_neighbourhood_counts_for_the_fort(garrison, built):
+def test_the_whole_neighbourhood_counts_for_the_fort(garrison, built, monkeypatch):
     state, alice, bob = table()
     put(state, alice, 0, 0, garrison)
     put(state, bob, 1, 0, 110, BuildingKind.FORT)
     put(state, bob, 0, 1, 110, BuildingKind.FORT)
-    alice.gold = BUILDING_COST
+    alice.gold = BOT_FORT_FLOOR
+    roll(monkeypatch, 0.9)
 
     assert bool(plan(state, alice).builds) is built
 
 
-def test_a_neutral_is_no_reason_to_fortify():
+def test_a_neutral_is_no_reason_to_fortify(monkeypatch):
     state, alice, _ = table()
     wet(state, 0, 1)
     put(state, alice, 0, 0, 150)
     state.tile(Coord(x=1, y=0)).soldiers = 200
-    alice.gold = BUILDING_COST
+    alice.gold = BOT_FORT_FLOOR
+    roll(monkeypatch, 0.9)
 
     assert plan(state, alice).builds == []
 
 
-def test_a_fort_is_never_built_on_water():
+def test_a_fort_is_never_built_on_water(monkeypatch):
     state, alice, bob = table()
     lake = wet(state, 1, 0)
     lake.owner = alice.id
     lake.soldiers = 100
     put(state, bob, 2, 0, 90, BuildingKind.FORT)
     put(state, alice, 0, 0, 100)
-    alice.gold = BUILDING_COST
+    alice.gold = BOT_FORT_FLOOR
+    roll(monkeypatch, 0.9)
 
     assert all(coord != Coord(x=1, y=0) for coord, _ in plan(state, alice).builds)
 
 
-def test_a_fort_needs_the_gold():
+@pytest.mark.parametrize("gold, built", [(BOT_FORT_FLOOR, True), (BOT_FORT_FLOOR - 1, False)])
+def test_a_fort_keeps_the_reserve(gold, built, monkeypatch):
     state, alice, bob = table()
     wet(state, 0, 1)
     put(state, alice, 0, 0, 150)
     put(state, bob, 1, 0, 100, BuildingKind.FORT)
-    alice.gold = BUILDING_COST - 1
+    alice.gold = gold
+    roll(monkeypatch, 0.9)
 
-    assert plan(state, alice).builds == []
+    assert bool(plan(state, alice).builds) is built
 
 
-def test_a_fort_is_not_repeated():
+def test_a_fort_is_not_repeated(monkeypatch):
     state, alice, bob = table()
     wet(state, 0, 1)
     put(state, alice, 0, 0, 150, BuildingKind.FORT)
     put(state, bob, 1, 0, 100, BuildingKind.FORT)
-    alice.gold = BUILDING_COST
+    alice.gold = BOT_FORT_FLOOR
+    roll(monkeypatch, 0.9)
 
     assert plan(state, alice).builds == []
 
@@ -267,21 +324,34 @@ def test_spare_gold_buys_several_farms():
         if BuildingKind.FARM in tile.buildings
     ]
     assert len(farms) == 3
-    assert alice.gold == BUILDING_COST
+    assert alice.gold == BOT_FARM_FLOOR * 2 - len(farms) * BUILDING_COST
 
 
-def test_a_fort_is_paid_for_before_a_farm():
+def test_a_fort_is_paid_for_before_a_farm(monkeypatch):
     state, alice, bob = table()
     block(state, alice)
     put(state, bob, 3, 0, 100, BuildingKind.FORT)
     alice.bot = True
     alice.gold = BOT_FARM_FLOOR + BUILDING_COST
+    roll(monkeypatch, 0.9)
 
     state.plan_bots()
 
     assert state.tile(Coord(x=2, y=0)).buildings == [BuildingKind.FORT]
     assert state.tile(Coord(x=0, y=0)).buildings == [BuildingKind.FARM]
-    assert alice.gold == BUILDING_COST
+    assert alice.gold == BOT_FORT_FLOOR
+
+
+def test_a_bot_order_never_stands(monkeypatch):
+    state, alice, _ = table()
+    block(state, alice)
+    alice.bot = True
+    roll(monkeypatch, 0.0)
+
+    state.plan_bots()
+
+    assert state.game.orders
+    assert all(order.repeat is False for order in state.game.orders)
 
 
 def test_a_bot_never_builds_twice_on_one_tile():
@@ -312,19 +382,21 @@ def test_a_bot_does_not_build_on_someone_elses_turn():
     assert alice.gold == BOT_FARM_FLOOR
 
 
-def test_the_plan_is_the_same_every_time():
+def test_the_plan_is_the_same_every_time(monkeypatch):
     state, alice, bob = table()
     block(state, alice)
     put(state, bob, 3, 0, 100, BuildingKind.FORT)
     alice.gold = BOT_FARM_FLOOR + BUILDING_COST
+    roll(monkeypatch, 0.0)
 
     assert plan(state, alice) == plan(state, alice)
 
 
-def test_a_new_plan_replaces_the_old_orders():
+def test_a_new_plan_replaces_the_old_orders(monkeypatch):
     state, alice, _ = table()
     put(state, alice, 0, 0, 200)
     alice.bot = True
+    roll(monkeypatch, 0.0)
     state.plan_bots()
     assert len(state.game.orders) == 1
 
@@ -334,10 +406,11 @@ def test_a_new_plan_replaces_the_old_orders():
     assert state.game.orders == []
 
 
-def test_the_plan_follows_the_board():
+def test_the_plan_follows_the_board(monkeypatch):
     state, alice, _ = table()
     put(state, alice, 0, 0, 200)
     alice.bot = True
+    roll(monkeypatch, 0.0)
     state.plan_bots()
     assert state.game.orders[0].target == Coord(x=1, y=0)
 
@@ -425,6 +498,57 @@ def test_a_full_table_gets_four_different_names():
 
     assert len(set(names)) == 4
     assert set(names) <= set(BOT_NAMES)
+
+
+def test_kick_clears_a_seat():
+    state = State()
+    alice = state.join("alice", PlayerColor.RED)
+    bob = state.join("bob", PlayerColor.BLUE)
+
+    state.kick(bob.id)
+
+    assert state.game.players == [alice]
+    assert "bob left the table" in state.game.log
+
+
+def test_kick_clears_a_bot():
+    state = State()
+    state.join("alice", PlayerColor.RED)
+    seated = state.add_bot()
+
+    state.kick(seated.id)
+
+    assert len(state.game.players) == 1
+
+
+def test_a_kicked_name_is_free_again():
+    state = State()
+    alice = state.join("alice", PlayerColor.RED)
+    state.kick(alice.id)
+
+    again = state.join("alice", PlayerColor.RED)
+
+    assert again.name == "alice"
+    assert len(state.game.players) == 1
+
+
+def test_kick_needs_a_known_seat():
+    state = State()
+
+    with pytest.raises(StateError, match="not in this game"):
+        state.kick("nobody")
+
+
+def test_kick_is_refused_once_the_game_is_on():
+    state = State()
+    alice = state.join("alice", PlayerColor.RED)
+    bob = state.join("bob", PlayerColor.BLUE)
+    state.start(alice.id, 10)
+
+    with pytest.raises(StateError, match="already started"):
+        state.kick(bob.id)
+
+    assert len(state.game.players) == 2
 
 
 def test_a_bystander_can_start_the_table():

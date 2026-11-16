@@ -11,6 +11,7 @@ from game.schemas import (
     ChatData,
     ErrorData,
     JoinData,
+    KickData,
     MoveData,
     ResumeData,
     StartData,
@@ -29,6 +30,7 @@ class CommandType(StrEnum):
     CHAT = "CHAT"
     END_TURN = "END_TURN"
     BOT = "BOT"
+    KICK = "KICK"
     RESET = "RESET"
 
 
@@ -44,7 +46,17 @@ class ResultType(StrEnum):
 
 class Command(BaseModel):
     type: CommandType
-    data: JoinData | MoveData | CancelData | BuildData | ResumeData | ChatData | StartData | None = None
+    data: (
+        JoinData
+        | MoveData
+        | CancelData
+        | BuildData
+        | ResumeData
+        | ChatData
+        | StartData
+        | KickData
+        | None
+    ) = None
 
 
 class Event(BaseModel):
@@ -61,6 +73,7 @@ class Dispatcher:
     def __init__(self, manager: Manager):
         self.state = State()
         self.manager = manager
+        self.bots: asyncio.Task | None = None
         self.handlers = {
             CommandType.JOIN: self.dispatch_join,
             CommandType.RESUME: self.dispatch_resume,
@@ -72,6 +85,7 @@ class Dispatcher:
             CommandType.CHAT: self.dispatch_chat,
             CommandType.END_TURN: self.dispatch_end_turn,
             CommandType.BOT: self.dispatch_bot,
+            CommandType.KICK: self.dispatch_kick,
             CommandType.RESET: self.dispatch_reset,
         }
 
@@ -98,7 +112,8 @@ class Dispatcher:
     async def dispatch_start(self, player_id: str | None, command: Command) -> None:
         data = command.data if isinstance(command.data, StartData) else StartData()
         self.state.start(player_id, data.size)
-        await self._settle_bots()
+        await self._broadcast_game()
+        self._start_bots()
 
     async def dispatch_map(self, player_id: str | None, command: Command) -> None:
         if not isinstance(command.data, StartData):
@@ -139,13 +154,21 @@ class Dispatcher:
 
     async def dispatch_end_turn(self, player_id: str | None, _: Command) -> None:
         self.state.end_turn(self._require_player(player_id))
-        await self._settle_bots()
+        await self._broadcast_game()
+        self._start_bots()
 
     async def dispatch_bot(self, _: str | None, __: Command) -> None:
         self.state.add_bot()
         await self._broadcast_game()
 
+    async def dispatch_kick(self, _: str | None, command: Command) -> None:
+        if not isinstance(command.data, KickData):
+            raise StateError("a seat is required")
+        self.state.kick(command.data.seat)
+        await self._broadcast_game()
+
     async def dispatch_reset(self, _: str | None, __: Command) -> None:
+        self._stop_bots()
         self.state = State()
         await self._broadcast_game()
 
@@ -157,17 +180,34 @@ class Dispatcher:
         if self.state.is_online(player_id):
             return
         self.state.drop(player_id)
-        await self._settle_bots()
+        await self._broadcast_game()
+        self._start_bots()
 
-    async def _settle_bots(self) -> None:
-        while True:
-            self.state.plan_bots()
+    def _start_bots(self) -> None:
+        if self.bots is not None and not self.bots.done():
+            return
+        if not any(player.bot for player in self.state.game.players):
+            return
+        self.bots = asyncio.create_task(self._play_bots())
+
+    def _stop_bots(self) -> None:
+        if self.bots is None:
+            return
+        self.bots.cancel()
+        self.bots = None
+
+    async def _play_bots(self) -> None:
+        state = self.state
+        while state is self.state:
+            state.plan_bots()
             await self._broadcast_game()
-            current = self.state.current
-            if current is None or not current.bot or self.state.game.winner is not None:
+            current = state.current
+            if current is None or not current.bot or state.game.winner is not None:
                 return
             await asyncio.sleep(BOT_PAUSE)
-            self.state.end_turn(current.id)
+            if state is not self.state or state.current is not current:
+                return
+            state.end_turn(current.id)
 
     @staticmethod
     def _require_player(player_id: str | None) -> str:

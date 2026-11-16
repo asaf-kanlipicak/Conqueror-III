@@ -5,9 +5,10 @@ import { PALETTE } from '../utils/palette'
 interface RosterProps {
   game: Game
   myId: string | null
+  onKick: (seat: string) => void
 }
 
-export function Roster({ game, myId }: RosterProps) {
+export function Roster({ game, myId, onKick }: RosterProps) {
   return (
     <section className="section">
       <h2 className="label">seats</h2>
@@ -19,6 +20,7 @@ export function Roster({ game, myId }: RosterProps) {
           <span>land</span>
           <span>soldiers</span>
           <span>gold</span>
+          <span />
         </div>
       )}
       <ul className="roster">
@@ -38,6 +40,13 @@ export function Roster({ game, myId }: RosterProps) {
               <span className="figure">{totals.tiles}</span>
               <span className="figure">{totals.soldiers}</span>
               <span className="figure">{player.gold}</span>
+              {game.started ? (
+                <span />
+              ) : (
+                <button className="drop" title={`clear ${player.name}'s seat`} onClick={() => onKick(player.id)}>
+                  ×
+                </button>
+              )}
             </li>
           )
         })}
