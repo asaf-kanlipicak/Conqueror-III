@@ -1,4 +1,4 @@
-import { BuildingKind, Coord, Game, Move, PendingOrder, Tile, TileKind } from '../types/schema'
+import { BuildingKind, Coord, Game, Move, PendingOrder, Player, Tile, TileKind } from '../types/schema'
 
 export const TILE_SIZE = 42
 export const TILE_GAP = 1
@@ -6,6 +6,7 @@ export const BOARD_SIZES = [10, 20]
 export const SEATS = 4
 export const BUILDING_COST = 250
 export const FORT_DEFENSE = 2
+export const CAPITAL_GRACE = 3
 
 export interface Totals {
   tiles: number
@@ -27,6 +28,10 @@ export function odds(attacker: number, defender: number): number {
 
 export function guardOf(tile: Tile): number {
   return tile.buildings.includes(BuildingKind.FORT) ? tile.soldiers * FORT_DEFENSE : tile.soldiers
+}
+
+export function capitalOf(game: Game, coord: Coord): Player | undefined {
+  return game.players.find((player) => player.capital !== null && sameCoord(player.capital, coord))
 }
 
 export function isAttack(game: Game, move: Move, owner: string | null): boolean {

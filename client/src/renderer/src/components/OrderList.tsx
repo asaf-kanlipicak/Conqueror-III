@@ -7,7 +7,7 @@ interface OrderListProps {
   myId: string | null
   orders: PendingOrder[]
   onOrder: (source: Coord, target: Coord, repeat: boolean) => void
-  onCancel: (source: Coord) => void
+  onCancel: (source: Coord, target?: Coord) => void
 }
 
 export function OrderList({ game, myId, orders, onOrder, onCancel }: OrderListProps) {
@@ -36,7 +36,7 @@ export function OrderList({ game, myId, orders, onOrder, onCancel }: OrderListPr
       {shown.length > 0 && (
         <ul className="order-list">
           {shown.map((move) => (
-            <li key={`${move.source.x}:${move.source.y}`}>
+            <li key={`${move.source.x}:${move.source.y}:${move.target.x}:${move.target.y}`}>
               <span className="where">
                 <span className="from">
                   ({move.source.x}, {move.source.y})
@@ -62,7 +62,7 @@ export function OrderList({ game, myId, orders, onOrder, onCancel }: OrderListPr
                   />
                 </svg>
               </button>
-              <button className="drop" onClick={() => onCancel(move.source)} title="cancel">
+              <button className="drop" onClick={() => onCancel(move.source, move.target)} title="cancel">
                 ×
               </button>
             </li>
@@ -71,7 +71,7 @@ export function OrderList({ game, myId, orders, onOrder, onCancel }: OrderListPr
       )}
 
       {shown.length > 1 && (
-        <button className="link clear-all" onClick={() => shown.forEach((move) => onCancel(move.source))}>
+        <button className="link clear-all" onClick={() => shown.forEach((move) => onCancel(move.source, move.target))}>
           {hideStanding ? `clear these ${shown.length}` : 'clear all'}
         </button>
       )}

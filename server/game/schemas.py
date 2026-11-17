@@ -24,8 +24,14 @@ class MoveData(Data):
     repeat: bool | None = None
 
 
+class SplitData(Data):
+    source: Coord
+    targets: list[Coord]
+
+
 class CancelData(Data):
     source: Coord
+    at: Coord | None = None
 
 
 class BuildData(Data):
@@ -43,6 +49,10 @@ class KickData(Data):
 
 class ChatData(Data):
     text: str
+
+
+class PauseData(Data):
+    paused: bool
 
 
 class ErrorData(BaseModel):

@@ -80,7 +80,7 @@ def test_a_bot_takes_its_turn(monkeypatch):
     owned = [
         tile for row in dispatcher.state.game.tiles for tile in row if tile.owner == seated.id
     ]
-    assert len(owned) == 2
+    assert len(owned) == 3
     assert any(order.player == seated.id for order in dispatcher.state.game.orders)
 
 
@@ -99,6 +99,27 @@ def test_a_bot_waits_for_its_turn(monkeypatch):
     assert [[tile.owner for tile in row] for row in dispatcher.state.game.tiles] == before
     assert dispatcher.state.current is not None
     assert dispatcher.state.current.id == alice.id
+
+
+def test_a_paused_bot_game_holds_still(monkeypatch):
+    monkeypatch.setattr(dispatcher_module, "BOT_PAUSE", 0)
+    dispatcher = Dispatcher(Manager())
+    dispatcher.state.add_bot()
+    dispatcher.state.add_bot()
+
+    async def run():
+        await dispatcher.dispatch_start(None, Command(type=CommandType.START, data={"size": 10}))
+        await asyncio.sleep(0)
+        await dispatcher.dispatch_pause(None, Command(type=CommandType.PAUSE, data={"paused": True}))
+        frozen = dispatcher.state.game.round
+        await asyncio.sleep(0.02)
+        assert dispatcher.bots is None
+        assert dispatcher.state.game.round == frozen
+        await dispatcher.dispatch_pause(None, Command(type=CommandType.PAUSE, data={"paused": False}))
+        await asyncio.sleep(0.02)
+        assert dispatcher.state.game.round > frozen
+
+    asyncio.run(run())
 
 
 def test_an_all_bot_game_reaches_a_winner(monkeypatch):

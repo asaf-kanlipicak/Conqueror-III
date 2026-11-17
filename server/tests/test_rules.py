@@ -45,6 +45,12 @@ def current(state):
     return state.current
 
 
+def claim(state, player, x, y):
+    tile = state.tile(Coord(x=x, y=y))
+    tile.owner = player.id
+    return tile
+
+
 def test_capitals_and_first_production(game):
     state, alice, bob = game
     assert current(state).id == alice.id
@@ -987,12 +993,13 @@ def test_interest_pays_everyone_at_once(game):
 
 def test_a_farm_pays_extra_production(game):
     state, alice, bob = game
+    before = claim(state, alice, 0, 1).soldiers
     alice.gold = BUILDING_COST
-    state.build(alice.id, Coord(x=0, y=0), BuildingKind.FARM)
-    assert state.tile(Coord(x=0, y=0)).buildings == [BuildingKind.FARM]
+    state.build(alice.id, Coord(x=0, y=1), BuildingKind.FARM)
+    assert state.tile(Coord(x=0, y=1)).buildings == [BuildingKind.FARM]
     state.end_turn(alice.id)
     state.end_turn(bob.id)
-    assert state.tile(Coord(x=0, y=0)).soldiers == START + PRODUCTION + FARM_BONUS
+    assert state.tile(Coord(x=0, y=1)).soldiers == before + PRODUCTION + FARM_BONUS
 
 
 def test_a_fort_doubles_the_defence(game, monkeypatch):
@@ -1048,10 +1055,11 @@ def test_a_fort_repels_a_weaker_attack_more_cheaply(game, monkeypatch):
 
 def test_both_can_stand_on_one_tile(game):
     state, alice, _ = game
+    claim(state, alice, 0, 1)
     alice.gold = BUILDING_COST * 2
-    state.build(alice.id, Coord(x=0, y=0), BuildingKind.FARM)
-    state.build(alice.id, Coord(x=0, y=0), BuildingKind.FORT)
-    assert state.tile(Coord(x=0, y=0)).buildings == [BuildingKind.FARM, BuildingKind.FORT]
+    state.build(alice.id, Coord(x=0, y=1), BuildingKind.FARM)
+    state.build(alice.id, Coord(x=0, y=1), BuildingKind.FORT)
+    assert state.tile(Coord(x=0, y=1)).buildings == [BuildingKind.FARM, BuildingKind.FORT]
     assert alice.gold == 0
 
 
@@ -1067,10 +1075,11 @@ def test_building_is_paid_for_once(game):
 
 def test_building_needs_the_gold(game):
     state, alice, _ = game
+    claim(state, alice, 0, 1)
     alice.gold = BUILDING_COST - 1
     with pytest.raises(StateError, match=f"costs {BUILDING_COST}"):
-        state.build(alice.id, Coord(x=0, y=0), BuildingKind.FARM)
-    assert state.tile(Coord(x=0, y=0)).buildings == []
+        state.build(alice.id, Coord(x=0, y=1), BuildingKind.FARM)
+    assert state.tile(Coord(x=0, y=1)).buildings == []
 
 
 def test_building_rules(game):

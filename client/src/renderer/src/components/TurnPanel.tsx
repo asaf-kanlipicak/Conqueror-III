@@ -8,12 +8,23 @@ interface TurnPanelProps {
   myTurn: boolean
   orders: PendingOrder[]
   onOrder: (source: Coord, target: Coord, repeat: boolean) => void
-  onCancelOrder: (source: Coord) => void
+  onCancelOrder: (source: Coord, target?: Coord) => void
   onEndTurn: () => void
+  onPause: (paused: boolean) => void
   onReset: () => void
 }
 
-export function TurnPanel({ game, myId, myTurn, orders, onOrder, onCancelOrder, onEndTurn, onReset }: TurnPanelProps) {
+export function TurnPanel({
+  game,
+  myId,
+  myTurn,
+  orders,
+  onOrder,
+  onCancelOrder,
+  onEndTurn,
+  onPause,
+  onReset
+}: TurnPanelProps) {
   const [confirming, setConfirming] = useState(false)
 
   useEffect(() => {
@@ -33,6 +44,7 @@ export function TurnPanel({ game, myId, myTurn, orders, onOrder, onCancelOrder, 
       <h2 className="label">orders</h2>
 
       {winner && <p className="stamp">{winner.name} wins</p>}
+      {!winner && game.paused && <p className="stamp">paused</p>}
 
       {!winner && !me && <p className="turn-line">watching</p>}
 
@@ -45,33 +57,44 @@ export function TurnPanel({ game, myId, myTurn, orders, onOrder, onCancelOrder, 
 
       {!winner && me && !me.eliminated && (
         <>
-          <p className="turn-line">{myTurn ? 'your move' : `waiting for ${active?.name ?? '…'}`}</p>
+          <p className="turn-line">
+            {game.paused ? 'on hold' : myTurn ? 'your move' : `waiting for ${active?.name ?? '…'}`}
+          </p>
           <OrderList game={game} myId={myId} orders={orders} onOrder={onOrder} onCancel={onCancelOrder} />
-          <button className="btn" disabled={!myTurn} onClick={onEndTurn}>
-            {!myTurn
-              ? 'waiting for your turn'
-              : orders.length === 0
-                ? 'end turn'
-                : `end turn · ${orders.length} ordered`}
+          <button className="btn" disabled={!myTurn || game.paused} onClick={onEndTurn}>
+            {game.paused
+              ? 'the game is paused'
+              : !myTurn
+                ? 'waiting for your turn'
+                : orders.length === 0
+                  ? 'end turn'
+                  : `end turn · ${orders.length} ordered`}
           </button>
         </>
       )}
 
-      <div className="reset">
-        <button
-          className={`link${confirming ? ' confirming' : ''}`}
-          onClick={() => {
-            if (confirming) {
-              onReset()
-              setConfirming(false)
-              return
-            }
-            setConfirming(true)
-          }}
-        >
-          {confirming ? 'sure? this clears the table' : 'reset the table'}
-        </button>
-      </div>
+      {game.started && (
+        <div className="controls">
+          {!winner && (
+            <button className="link" onClick={() => onPause(!game.paused)}>
+              {game.paused ? 'resume the game' : 'pause the game'}
+            </button>
+          )}
+          <button
+            className={`link${confirming ? ' confirming' : ''}`}
+            onClick={() => {
+              if (confirming) {
+                onReset()
+                setConfirming(false)
+                return
+              }
+              setConfirming(true)
+            }}
+          >
+            {confirming ? 'sure? this clears the table' : 'reset the table'}
+          </button>
+        </div>
+      )}
     </section>
   )
 }

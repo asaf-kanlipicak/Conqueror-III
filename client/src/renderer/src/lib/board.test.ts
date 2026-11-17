@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   boardSpan,
+  capitalOf,
   clickTile,
   guardOf,
   isAdjacent,
@@ -27,13 +28,34 @@ function sample(): Game {
       [tile('b', 3, TileKind.WATER), tile('a', 0)]
     ],
     players: [
-      { id: 'a', name: 'alice', color: PlayerColor.RED, eliminated: false, online: true, bot: false, gold: 0 },
-      { id: 'b', name: 'bob', color: PlayerColor.BLUE, eliminated: false, online: true, bot: false, gold: 0 }
+      {
+        id: 'a',
+        name: 'alice',
+        color: PlayerColor.RED,
+        eliminated: false,
+        online: true,
+        bot: false,
+        gold: 0,
+        capital: { x: 0, y: 0 },
+        capital_lost: 0
+      },
+      {
+        id: 'b',
+        name: 'bob',
+        color: PlayerColor.BLUE,
+        eliminated: false,
+        online: true,
+        bot: false,
+        gold: 0,
+        capital: { x: 1, y: 1 },
+        capital_lost: 0
+      }
     ],
     orders: [],
     turn: 0,
     round: 1,
     started: true,
+    paused: false,
     started_at: null,
     winner: null,
     log: [],
@@ -191,5 +213,22 @@ describe('board clicks', () => {
   it('moves the pick to another tile', () => {
     expect(clickTile(corner, far, true, false)).toEqual({ kind: 'select', coord: far })
     expect(clickTile(corner, far, false, false)).toEqual({ kind: 'select', coord: null })
+  })
+})
+
+describe('capitalOf', () => {
+  it('names the player whose capital sits on a tile', () => {
+    expect(capitalOf(sample(), { x: 0, y: 0 })?.id).toBe('a')
+    expect(capitalOf(sample(), { x: 1, y: 1 })?.id).toBe('b')
+  })
+
+  it('leaves an ordinary tile alone', () => {
+    expect(capitalOf(sample(), { x: 1, y: 0 })).toBeUndefined()
+  })
+
+  it('still finds a capital the owner has lost', () => {
+    const game = sample()
+    game.players[0].capital_lost = 2
+    expect(capitalOf(game, { x: 0, y: 0 })?.capital_lost).toBe(2)
   })
 })

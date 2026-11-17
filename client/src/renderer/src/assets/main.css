@@ -192,6 +192,26 @@ input {
   box-shadow: inset 0 0 0 1px rgba(38, 34, 28, 0.55);
 }
 
+.tile.splitting {
+  outline: 1px dashed var(--accent);
+  outline-offset: -3px;
+}
+
+.tile .star {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  z-index: 1;
+  width: 8px;
+  height: 8px;
+  clip-path: polygon(50% 0%, 61% 35%, 98% 35%, 68% 57%, 79% 91%, 50% 70%, 21% 91%, 32% 57%, 2% 35%, 39% 35%);
+  pointer-events: none;
+}
+
+.tile .star.lost {
+  opacity: 0.4;
+}
+
 .tile.fort::after {
   content: '';
   position: absolute;
@@ -361,6 +381,10 @@ input {
 
 .roster-row.out {
   color: var(--ink-soft);
+}
+
+.roster-row.out .text,
+.roster-row.out .figure {
   text-decoration: line-through;
 }
 
@@ -372,9 +396,29 @@ input {
 }
 
 .who {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.name {
+  display: flex;
+  align-items: baseline;
+  min-width: 0;
+}
+
+.text {
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
+}
+
+.alarm {
+  font-size: 10.5px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--accent);
 }
 
 .tag {
@@ -392,7 +436,7 @@ input {
   margin-left: 8px;
   border: 1px solid var(--ink-soft);
   border-radius: 50%;
-  vertical-align: middle;
+  align-self: center;
 }
 
 .dot.live {
@@ -688,7 +732,11 @@ input {
   transform: rotate(-1.5deg);
 }
 
-.reset {
+.controls {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 10px;
   margin-top: 18px;
 }
 

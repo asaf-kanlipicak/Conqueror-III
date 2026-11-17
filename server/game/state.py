@@ -10,6 +10,7 @@ from game.constants import (
     BOT_NAMES,
     BUILDING_COST,
     CAPITAL_GARRISON,
+    CAPITAL_GRACE,
     CHAT_LIMIT,
     CHAT_MAX,
     FARM_BONUS,
@@ -176,6 +177,9 @@ class State:
         if self.game.winner is not None or current is None or current.id != player.id:
             self._log(f"{player.name} dropped out")
             return
+        if self.game.paused:
+            self._log(f"{player.name} dropped out, waiting for the game to resume")
+            return
         self._log(f"{player.name} dropped out, turn skipped")
         self._next_turn()
 
@@ -186,26 +190,47 @@ class State:
         player = self._find(player_id)
         return player is not None and player.online
 
+    def _reopen(self) -> None:
+        self.game.started = False
+        self.game.paused = False
+        self.game.winner = None
+        self.game.orders = []
+        self.game.turn = 0
+        self.game.round = 0
+        self.game.started_at = None
+        self.game.log = []
+        self.game.chat = []
+        for player in self.game.players:
+            player.eliminated = False
+            player.gold = 0
+            player.capital = None
+            player.capital_lost = 0
+
     def shape(self, player_id: str | None, size: int) -> None:
         if player_id is not None:
             self.player(player_id)
-        if self.game.started:
+        if self.game.started and self.game.winner is None:
             raise StateError("the map is already in play")
         if size not in BOARD_SIZES:
             raise StateError("that board is not on offer")
+        if self.game.winner is not None:
+            self._reopen()
         self.game.size = size
         self.game.tiles = self._build_tiles(size)
 
     def start(self, player_id: str | None, size: int = BOARD_SIZE) -> None:
         if player_id is not None:
             self.player(player_id)
-        if self.game.started:
+        if self.game.started and self.game.winner is None:
             raise StateError("the game has already started")
         if len(self.game.players) < 2:
             raise StateError("at least two players are needed")
         if size not in BOARD_SIZES:
             raise StateError("that board is not on offer")
-        if size != self.game.size:
+        restart = self.game.winner is not None
+        if restart:
+            self._reopen()
+        if restart or size != self.game.size:
             self.game.size = size
             self.game.tiles = self._build_tiles(size)
         self.game.orders = []
@@ -213,6 +238,9 @@ class State:
             tile = self.game.tiles[y][x]
             tile.owner = player.id
             tile.soldiers = CAPITAL_GARRISON
+            tile.buildings = [BuildingKind.FORT]
+            player.capital = Coord(x=x, y=y)
+            player.capital_lost = 0
         self.game.started = True
         self.game.started_at = time.time()
         self.game.round = 1
@@ -249,13 +277,54 @@ class State:
             )
         )
 
-    def remove_order(self, player_id: str, source: Coord) -> None:
+    def split_order(self, player_id: str, source: Coord, targets: list[Coord]) -> None:
         player = self._playing(player_id)
-        for order in self.game.orders:
-            if order.source == source and order.player == player.id:
-                self.game.orders.remove(order)
-                return
-        raise StateError("that tile has no order")
+        tile = self.tile(source)
+        if tile.owner != player.id:
+            raise StateError("you do not own that tile")
+        if tile.soldiers == 0:
+            raise StateError("that tile has no soldiers")
+        picked: list[Coord] = []
+        for target in targets:
+            self.tile(target)
+            if target != source and abs(source.x - target.x) + abs(source.y - target.y) != 1:
+                raise StateError("those tiles are not adjacent")
+            if target not in picked:
+                picked.append(target)
+        if not picked:
+            self.game.orders = [order for order in self.game.orders if order.source != source]
+            return
+        share = tile.soldiers // len(picked)
+        if share == 0:
+            raise StateError("too few soldiers to split that many ways")
+        self.game.orders = [order for order in self.game.orders if order.source != source]
+        for target in picked:
+            if target == source:
+                continue
+            self.game.orders.append(
+                PendingOrder(
+                    player=player.id,
+                    source=source,
+                    target=target,
+                    soldiers=share,
+                )
+            )
+
+    def remove_order(
+        self, player_id: str, source: Coord, target: Coord | None = None
+    ) -> None:
+        player = self._playing(player_id)
+        mine = [
+            order
+            for order in self.game.orders
+            if order.source == source
+            and order.player == player.id
+            and (target is None or order.target == target)
+        ]
+        if not mine:
+            raise StateError("that tile has no order")
+        for order in mine:
+            self.game.orders.remove(order)
 
     def build(self, player_id: str, coord: Coord, building: BuildingKind) -> None:
         player = self._require_turn(player_id)
@@ -286,8 +355,15 @@ class State:
                 continue
             self.game.orders = [order for order in self.game.orders if order.player != player.id]
             plan = bot.think(self.game, player)
+            legs: dict[tuple[int, int], list[Coord]] = {}
             for order in plan.orders:
-                self.add_order(player.id, order.source, order.target, repeat=False)
+                legs.setdefault((order.source.x, order.source.y), []).append(order.target)
+            for (x, y), targets in legs.items():
+                source = Coord(x=x, y=y)
+                if len(targets) == 1:
+                    self.add_order(player.id, source, targets[0], repeat=False)
+                else:
+                    self.split_order(player.id, source, targets)
             if current is not None and current.id == player.id:
                 for coord, building in plan.builds:
                     self._raise(player, coord, building)
@@ -300,7 +376,23 @@ class State:
         self.game.chat.append(ChatLine(name=player.name, text=text, at=time.time()))
         del self.game.chat[:-CHAT_LIMIT]
 
+    def pause(self, paused: bool) -> None:
+        if not self.game.started:
+            raise StateError("the game has not started")
+        if self.game.winner is not None:
+            raise StateError("the game is over")
+        if self.game.paused == paused:
+            return
+        self.game.paused = paused
+        self._log("the game is paused" if paused else "the game is back on")
+        if not paused:
+            current = self.current
+            if current is not None and not current.online:
+                self._next_turn()
+
     def end_turn(self, player_id: str) -> None:
+        if self.game.paused:
+            raise StateError("the game is paused")
         player = self._require_turn(player_id)
         for order in self.game.orders:
             if order.player != player.id or not order.repeat:
@@ -429,6 +521,34 @@ class State:
                         tile.soldiers = 0
                         tile.buildings = []
 
+    def _check_capitals(self) -> None:
+        for player in self.game.players:
+            if player.eliminated or player.capital is None:
+                continue
+            if self.tile(player.capital).owner == player.id:
+                player.capital_lost = 0
+                continue
+            player.capital_lost += 1
+            left = CAPITAL_GRACE - player.capital_lost
+            if left <= 0:
+                self._collapse(player)
+                continue
+            noun = "round" if left == 1 else "rounds"
+            self._log(f"{player.name} has lost their capital, {left} {noun} to retake it")
+
+    def _collapse(self, player: Player) -> None:
+        player.eliminated = True
+        player.capital_lost = 0
+        self._log(f"{player.name} never retook their capital and is out")
+        for row in self.game.tiles:
+            for tile in row:
+                if tile.owner != player.id:
+                    continue
+                tile.owner = None
+                tile.loot = tile.soldiers // 2
+                if BuildingKind.FARM in tile.buildings:
+                    tile.buildings.remove(BuildingKind.FARM)
+
     def _owns_land(self, player_id: str) -> bool:
         return any(
             tile.owner == player_id and tile.kind == TileKind.LAND
@@ -447,17 +567,22 @@ class State:
     def _next_turn(self) -> None:
         count = len(self.game.players)
         skipped = []
+        advanced = False
         for offset in range(1, count + 1):
             index = (self.game.turn + offset) % count
+            if index <= self.game.turn and not advanced:
+                advanced = True
+                self.game.round += 1
+                self._check_capitals()
+                if self._finish():
+                    return
+                self._produce()
             player = self.game.players[index]
             if player.eliminated:
                 continue
             if not player.online:
                 skipped.append(player.name)
                 continue
-            if index <= self.game.turn:
-                self.game.round += 1
-                self._produce()
             self.game.turn = index
             for name in skipped:
                 self._log(f"{name}'s turn skipped, offline")

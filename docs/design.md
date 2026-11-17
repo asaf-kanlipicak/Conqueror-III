@@ -38,6 +38,30 @@ A tile with 0 soldiers is empty: walking into it needs no roll and costs nothing
 - A player whose connection drops keeps their tiles and soldiers. Queued orders that were never
   committed are dropped, their turn is skipped while they are away, and they can rejoin with their
   player id. Coming back earns a short grace period, so a reload does not cost a turn.
+- **Pausing** stops the clock for everyone: no turn can be ended, the bots hold their plan, and a
+  player who drops is marked away without losing their turn. Anyone at the table can pause or resume,
+  which is how a game survives everyone closing the window. Resuming hands the turn on if whoever
+  holds it is still away.
+
+## Capitals
+
+Each player starts on their seat, and that tile is their capital. It begins fortified, for free, and
+carries a star in its owner's colour — the only mark on the board that is not about soldiers.
+
+Losing it does not lose the game, but it starts a clock. At the end of every round the player does
+not hold their capital, the clock ticks; three ticks and they are out. Taking it back resets the
+clock to nothing. The fort does not come back with it: it was razed when the tile fell, and no
+capital ever earns a second one.
+
+A player who runs out of time is **not** wiped the way an ordinary loser is. Their land simply stops
+being theirs: every tile they still hold turns neutral, keeps its garrison, keeps its forts, and
+loses its farms — nobody farms for a flag that is gone. The garrison it happens to be holding becomes
+the pile on the tile, half of it, so the territory stays on the board as a prize worth taking rather
+than evaporating.
+
+That is the second way to win, and the one that ends long games. Grinding a rival down to their last
+tile takes a long time when both sides are dug in; standing on their capital for three rounds does
+not.
 
 ## A turn
 
@@ -47,20 +71,25 @@ A tile with 0 soldiers is empty: walking into it needs no roll and costs nothing
 2. Orders can be queued at any time, including while someone else is playing. They wait for your
    turn, and everyone can see them. A plan dies with its tile: if you lose the source before your
    turn comes, the order is dropped.
-3. A tile gives at most one order per turn; giving it a new one replaces the old. Several tiles may
-   attack the same target.
-4. An order carries the soldiers the tile held when you gave it, so reinforcing a tile and ordering
-   from it in the same turn sends only the original garrison onwards.
-5. An order can be set to **stand**: it stays on its tile and runs again at the start of every one of
+3. A tile gives at most one order per target per turn. Several tiles may attack the same target.
+4. **Splitting**: right-clicking neighbours instead of left-clicking them divides the tile's soldiers
+   between every target picked, floor each, with the remainder left behind. The tile itself can be
+   one of the picks, which is how you send half a stack and keep the other half at home. Four
+   neighbours and 200 soldiers is 50 apiece; three ways is 66 each and 2 kept. A tile needs at least
+   one soldier per way to split at all.
+5. An order carries the soldiers the tile held when you gave it, so reinforcing a tile and ordering
+   from it in the same turn sends only the original garrison onwards. The legs of a split carry their
+   own share, so the second leg is unaffected by what the first one spent.
+6. An order can be set to **stand**: it stays on its tile and runs again at the start of every one of
    your turns, carrying whatever the tile holds at that moment. That is how a supply line is kept
    running without re-issuing it. A standing order dies with its tile, like any other.
-6. A **move** stands by default and an **attack** does not. Feeding your own land is the thing you
+7. A **move** stands by default and an **attack** does not. Feeding your own land is the thing you
    want repeating — a tile's production keeps flowing down the line — while an attack is a one-off
    unless you deliberately make it a siege. Pointing an order at a different neighbour gives it that
    neighbour's default; leaving it alone keeps whatever you set.
-7. End Turn: orders resolve one by one in the order you issued them, each rolling when it resolves.
+8. End Turn: orders resolve one by one in the order you issued them, each rolling when it resolves.
    If a tile has become yours by the time a later order resolves, that order is just a transfer.
-8. Production happens at the start of every round, for all players at once — including one round
+9. Production happens at the start of every round, for all players at once — including one round
    before the first turn. Turn order is join order.
 
 Because a tile acts once per turn, a stack moves at most one tile per turn — standing orders
@@ -133,7 +162,12 @@ Gold buys buildings, on your own land, on your own turn, 250 apiece.
 
 ## Winning
 
-Last player with land tiles wins.
+Last player with land tiles wins. A capital held for three rounds does the same job by another road:
+it takes the loser's whole territory off the board, so the last one standing is decided by the same
+rule either way.
+
+Once it is over the table falls back to the lobby with everyone still seated, so the next game is one
+click away — a fresh map, the same faces, the same bots.
 
 ## Bots
 
@@ -144,11 +178,18 @@ the humans are playing.
 The plan is a flow field. Every tile the bot does not own is a target; a breadth-first search over
 land and water gives every tile its distance to the nearest one. Then, for each of the bot's tiles:
 
-- adjacent to a target — it may strike. Against each neighbour it works out its win chance
-  `a / (a + guard)`, takes the best of them as its confidence, and rolls. A roll above that
-  confidence means it holds and lets the field feed it; otherwise it picks a neighbour, weighted by
-  those same chances, and attacks it
+- adjacent to a target — it may strike. It sorts the neighbours by garrison and asks how many it can
+  take at once: the largest `k` where an even share `a / k` still covers the k-th cheapest garrison.
+  At `k` of one it works out its win chance against each neighbour, takes the best of them as its
+  confidence, and rolls; a roll above that confidence means it holds and lets the field feed it,
+  otherwise it picks a neighbour, weighted by those same chances, and attacks it. Above one it rolls
+  against the share's own odds and, if the roll passes, splits the tile across the cheapest `k`
 - otherwise — send everything one step down the field
+
+Splitting is worth it because a share only has to match the garrison, not beat the whole stack: 300
+soldiers against a 60 and a 90 can take both this turn with 150 apiece, where one attack would take
+the 60 and leave the 90 standing. The test is per leg and not on the total, so 400 against 50, 50 and
+350 still buys the two cheap ones even though the sum is larger than the stack.
 
 So a tile at even odds attacks half the time, one at two to one about two thirds, and a tile facing
 nothing better than a third attacks a third of the time. The same roll covers a hopeless case, so a
@@ -159,6 +200,20 @@ next to each other forever.
 Because the flow only ever moves downhill, a stack walks one tile a turn and no two tiles swap. Open
 water is part of the field, so a bot crosses the river the way it crosses land: one tile at a time,
 with a stack that has to survive the crossing.
+
+A bot that has lost its capital drops everything else. The field is rebuilt with the capital as its
+only source, so every tile on the board flows at that one tile, and the whole army converges on the
+retake. Nothing else is worth attacking with a three-round clock running.
+
+A bot also has a **homeland**: the quarter its capital sits in, bounded by the river. Ground there
+counts for more than ground anywhere else.
+
+- Striking a homeland tile doubles the bot's willingness, so a coin flip at home reads as a certain
+  attack. Nothing is capped — above even odds it simply always goes.
+- The field charges one step to enter homeland ground and two to enter anywhere else. A target six
+  steps away through its own quarter therefore costs what one three steps away costs across the
+  river, which is how a bot is drawn home from further out than it would otherwise travel. The
+  gradient stays strictly downhill, so the flow still cannot loop.
 
 Gold follows one rule: **never spend down to nothing**, keep a margin above the price, spend the rest.
 
@@ -185,10 +240,11 @@ A bot's turn is announced, then played a second later, so the table sees the pla
 | farm bonus               | +25/turn     |
 | fort defence             | ×2           |
 | capital garrison         | 200          |
+| capital grace            | 3 rounds     |
+| homeland attack urge     | ×2           |
 | neutral garrison         | 80–320, ±10% |
 | players                  | 2–4          |
 
 ## Not in v1
 
-Docks, ships, naval combat, tech trees, unit types, fog of war, partial transfers, extra win
-conditions.
+Docks, ships, naval combat, tech trees, unit types, fog of war, extra win conditions.

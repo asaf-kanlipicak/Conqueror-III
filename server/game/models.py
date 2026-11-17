@@ -17,6 +17,8 @@ class Player(BaseModel):
     online: bool = True
     bot: bool = False
     gold: int = 0
+    capital: Coord | None = None
+    capital_lost: int = 0
 
 
 class Tile(BaseModel):
@@ -49,6 +51,7 @@ class Game(BaseModel):
     turn: int = 0
     round: int = 0
     started: bool = False
+    paused: bool = False
     started_at: float | None = None
     winner: str | None = None
     log: list[str] = []

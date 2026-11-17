@@ -13,7 +13,9 @@ from game.schemas import (
     JoinData,
     KickData,
     MoveData,
+    PauseData,
     ResumeData,
+    SplitData,
     StartData,
 )
 from game.state import State, StateError
@@ -25,10 +27,12 @@ class CommandType(StrEnum):
     START = "START"
     MAP = "MAP"
     MOVE = "MOVE"
+    SPLIT = "SPLIT"
     CANCEL = "CANCEL"
     BUILD = "BUILD"
     CHAT = "CHAT"
     END_TURN = "END_TURN"
+    PAUSE = "PAUSE"
     BOT = "BOT"
     KICK = "KICK"
     RESET = "RESET"
@@ -49,12 +53,14 @@ class Command(BaseModel):
     data: (
         JoinData
         | MoveData
+        | SplitData
         | CancelData
         | BuildData
         | ResumeData
         | ChatData
         | StartData
         | KickData
+        | PauseData
         | None
     ) = None
 
@@ -80,10 +86,12 @@ class Dispatcher:
             CommandType.START: self.dispatch_start,
             CommandType.MAP: self.dispatch_map,
             CommandType.MOVE: self.dispatch_move,
+            CommandType.SPLIT: self.dispatch_split,
             CommandType.CANCEL: self.dispatch_cancel,
             CommandType.BUILD: self.dispatch_build,
             CommandType.CHAT: self.dispatch_chat,
             CommandType.END_TURN: self.dispatch_end_turn,
+            CommandType.PAUSE: self.dispatch_pause,
             CommandType.BOT: self.dispatch_bot,
             CommandType.KICK: self.dispatch_kick,
             CommandType.RESET: self.dispatch_reset,
@@ -132,10 +140,20 @@ class Dispatcher:
         )
         await self._broadcast_game()
 
+    async def dispatch_split(self, player_id: str | None, command: Command) -> None:
+        if not isinstance(command.data, SplitData):
+            raise StateError("a source and a target list are required")
+        self.state.split_order(
+            self._require_player(player_id), command.data.source, command.data.targets
+        )
+        await self._broadcast_game()
+
     async def dispatch_cancel(self, player_id: str | None, command: Command) -> None:
         if not isinstance(command.data, CancelData):
             raise StateError("a source is required")
-        self.state.remove_order(self._require_player(player_id), command.data.source)
+        self.state.remove_order(
+            self._require_player(player_id), command.data.source, command.data.at
+        )
         await self._broadcast_game()
 
     async def dispatch_build(self, player_id: str | None, command: Command) -> None:
@@ -156,6 +174,16 @@ class Dispatcher:
         self.state.end_turn(self._require_player(player_id))
         await self._broadcast_game()
         self._start_bots()
+
+    async def dispatch_pause(self, _: str | None, command: Command) -> None:
+        if not isinstance(command.data, PauseData):
+            raise StateError("a pause state is required")
+        self.state.pause(command.data.paused)
+        if command.data.paused:
+            self._stop_bots()
+        else:
+            self._start_bots()
+        await self._broadcast_game()
 
     async def dispatch_bot(self, _: str | None, __: Command) -> None:
         self.state.add_bot()
@@ -184,6 +212,8 @@ class Dispatcher:
         self._start_bots()
 
     def _start_bots(self) -> None:
+        if self.state.game.paused:
+            return
         if self.bots is not None and not self.bots.done():
             return
         if not any(player.bot for player in self.state.game.players):
@@ -198,14 +228,14 @@ class Dispatcher:
 
     async def _play_bots(self) -> None:
         state = self.state
-        while state is self.state:
+        while state is self.state and not state.game.paused:
             state.plan_bots()
             await self._broadcast_game()
             current = state.current
             if current is None or not current.bot or state.game.winner is not None:
                 return
             await asyncio.sleep(BOT_PAUSE)
-            if state is not self.state or state.current is not current:
+            if state is not self.state or state.current is not current or state.game.paused:
                 return
             state.end_turn(current.id)
 

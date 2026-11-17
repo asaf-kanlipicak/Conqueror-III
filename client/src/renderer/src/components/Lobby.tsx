@@ -19,7 +19,7 @@ export function Lobby({ game, myId, onJoin, onStart, onShape, onBot }: LobbyProp
   const seated = game.players.some((player) => player.id === myId)
   const taken = new Set(game.players.map((player) => player.color))
 
-  if (game.started) {
+  if (game.started && !game.winner) {
     if (seated) return null
     return (
       <section className="section">

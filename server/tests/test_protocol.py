@@ -85,6 +85,77 @@ def test_join_start_move_and_end_turn(client):
         assert "say something" in receive_until(bob, "ERROR")["data"]["message"]
 
 
+def test_a_split_is_sent_and_one_leg_cancelled(client):
+    with client.websocket_connect("/ws") as alice, client.websocket_connect("/ws") as bob:
+        receive_until(alice, "CONNECT_SUCCESS")
+        receive_until(bob, "CONNECT_SUCCESS")
+        alice.send_json({"type": "JOIN", "data": {"name": "alice", "color": "red"}})
+        receive_until(alice, "JOIN_SUCCESS")
+        bob.send_json({"type": "JOIN", "data": {"name": "bob", "color": "blue"}})
+        receive_until(bob, "JOIN_SUCCESS")
+        alice.send_json({"type": "START", "data": {"size": 10}})
+        game = wait_game(alice, lambda state: state["started"])
+        share = game["tiles"][0][0]["soldiers"] // 2
+
+        alice.send_json(
+            {
+                "type": "SPLIT",
+                "data": {"source": {"x": 0, "y": 0}, "targets": [{"x": 1, "y": 0}, {"x": 0, "y": 1}]},
+            }
+        )
+        game = wait_game(alice, lambda state: len(state["orders"]) == 2)
+        assert [(order["target"], order["soldiers"]) for order in game["orders"]] == [
+            ({"x": 1, "y": 0}, share),
+            ({"x": 0, "y": 1}, share),
+        ]
+
+        alice.send_json(
+            {"type": "CANCEL", "data": {"source": {"x": 0, "y": 0}, "at": {"x": 0, "y": 1}}}
+        )
+        game = wait_game(alice, lambda state: len(state["orders"]) == 1)
+        assert game["orders"][0]["target"] == {"x": 1, "y": 0}
+
+        alice.send_json({"type": "CANCEL", "data": {"source": {"x": 0, "y": 0}}})
+        wait_game(alice, lambda state: not state["orders"])
+
+
+def test_the_capital_is_published_and_starts_forted(client):
+    with client.websocket_connect("/ws") as alice, client.websocket_connect("/ws") as bob:
+        receive_until(alice, "CONNECT_SUCCESS")
+        receive_until(bob, "CONNECT_SUCCESS")
+        alice.send_json({"type": "JOIN", "data": {"name": "alice", "color": "red"}})
+        receive_until(alice, "JOIN_SUCCESS")
+        bob.send_json({"type": "JOIN", "data": {"name": "bob", "color": "blue"}})
+        receive_until(bob, "JOIN_SUCCESS")
+        alice.send_json({"type": "START", "data": {"size": 10}})
+        game = wait_game(alice, lambda state: state["started"])
+
+        assert game["players"][0]["capital"] == {"x": 0, "y": 0}
+        assert game["players"][0]["capital_lost"] == 0
+        assert game["tiles"][0][0]["buildings"] == ["fort"]
+
+
+def test_a_split_that_cannot_be_afforded_is_refused(client):
+    with client.websocket_connect("/ws") as alice, client.websocket_connect("/ws") as bob:
+        receive_until(alice, "CONNECT_SUCCESS")
+        receive_until(bob, "CONNECT_SUCCESS")
+        alice.send_json({"type": "JOIN", "data": {"name": "alice", "color": "red"}})
+        receive_until(alice, "JOIN_SUCCESS")
+        bob.send_json({"type": "JOIN", "data": {"name": "bob", "color": "blue"}})
+        receive_until(bob, "JOIN_SUCCESS")
+        alice.send_json({"type": "START", "data": {"size": 10}})
+        wait_game(alice, lambda state: state["started"])
+
+        alice.send_json(
+            {
+                "type": "SPLIT",
+                "data": {"source": {"x": 0, "y": 0}, "targets": [{"x": 5, "y": 5}]},
+            }
+        )
+
+        assert "not adjacent" in receive_until(alice, "ERROR")["data"]["message"]
+
+
 def test_a_small_board_can_be_chosen_at_the_start(client):
     with client.websocket_connect("/ws") as alice, client.websocket_connect("/ws") as bob:
         receive_until(alice, "CONNECT_SUCCESS")
@@ -316,6 +387,52 @@ def test_a_kicked_player_cannot_order_any_more(client):
             {"type": "MOVE", "data": {"source": {"x": 0, "y": 0}, "target": {"x": 1, "y": 0}}}
         )
         assert "join the game first" in receive_until(alice, "ERROR")["data"]["message"]
+
+
+def test_anyone_can_pause_and_resume(client):
+    with client.websocket_connect("/ws") as alice, client.websocket_connect("/ws") as bob:
+        receive_until(alice, "CONNECT_SUCCESS")
+        receive_until(bob, "CONNECT_SUCCESS")
+        alice.send_json({"type": "JOIN", "data": {"name": "alice", "color": "red"}})
+        receive_until(alice, "JOIN_SUCCESS")
+        bob.send_json({"type": "JOIN", "data": {"name": "bob", "color": "blue"}})
+        receive_until(bob, "JOIN_SUCCESS")
+        alice.send_json({"type": "START", "data": {"size": 10}})
+        wait_game(alice, lambda state: state["started"])
+
+        alice.send_json({"type": "PAUSE", "data": {"paused": True}})
+        game = wait_game(alice, lambda state: state["paused"])
+        assert game["paused"] is True
+
+        bob.send_json({"type": "END_TURN"})
+        assert "paused" in receive_until(bob, "ERROR")["data"]["message"]
+
+        bob.send_json({"type": "PAUSE", "data": {"paused": False}})
+        game = wait_game(alice, lambda state: not state["paused"])
+
+        assert game["paused"] is False
+        assert game["round"] == 1
+
+
+def test_a_finished_game_can_be_started_again(client):
+    with client.websocket_connect("/ws") as alice, client.websocket_connect("/ws") as bob:
+        receive_until(alice, "CONNECT_SUCCESS")
+        receive_until(bob, "CONNECT_SUCCESS")
+        alice.send_json({"type": "JOIN", "data": {"name": "alice", "color": "red"}})
+        receive_until(alice, "JOIN_SUCCESS")
+        bob.send_json({"type": "JOIN", "data": {"name": "bob", "color": "blue"}})
+        receive_until(bob, "JOIN_SUCCESS")
+        alice.send_json({"type": "START", "data": {"size": 10}})
+        game = wait_game(alice, lambda state: state["started"])
+        main.dispatcher.state.game.winner = game["players"][0]["id"]
+
+        alice.send_json({"type": "START", "data": {"size": 20}})
+        game = wait_game(alice, lambda state: state["size"] == 20 and state["started"])
+
+        assert game["winner"] is None
+        assert game["round"] == 1
+        assert len(game["players"]) == 2
+        assert game["tiles"][0][0]["buildings"] == ["fort"]
 
 
 def test_reset_clears_the_table(client):

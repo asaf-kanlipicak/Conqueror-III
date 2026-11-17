@@ -1,6 +1,6 @@
 {
   "name": "conqueror-iii-client",
-  "version": "0.5.1",
+  "version": "0.5.2",
   "description": "Conqueror III Client",
   "main": "./out/main/index.js",
   "author": "Asaf31214",

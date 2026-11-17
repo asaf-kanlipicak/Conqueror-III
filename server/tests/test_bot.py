@@ -21,6 +21,8 @@ def table(size=10, garrison=100):
     bob = state.join("bob", PlayerColor.BLUE)
     state.start(alice.id, size)
     state.game.tiles = board(size, garrison)
+    alice.capital = None
+    bob.capital = None
     return state, alice, bob
 
 
@@ -117,7 +119,7 @@ def test_a_free_tile_outweighs_a_contested_one(monkeypatch):
 def test_a_tie_is_split_by_the_pile(monkeypatch):
     state, alice, _ = table()
     wet(state, 1, 1)
-    put(state, alice, 1, 0, 200)
+    put(state, alice, 1, 0, 150)
     state.tile(Coord(x=0, y=0)).loot = 40
     state.tile(Coord(x=2, y=0)).loot = 60
 
@@ -134,7 +136,7 @@ def test_no_neighbour_means_no_strike():
     wet(state, 1, 0)
     put(state, alice, 0, 0, 100)
 
-    assert bot._strike(state.game, alice.id, 0, 0, 100) is None
+    assert bot._strike(state.game, alice.id, 0, 0, 100) == []
 
 
 def test_the_back_of_a_block_pushes_forward(monkeypatch):
@@ -342,6 +344,218 @@ def test_a_fort_is_paid_for_before_a_farm(monkeypatch):
     assert alice.gold == BOT_FORT_FLOOR
 
 
+def test_a_lost_capital_pulls_the_whole_plan_back(monkeypatch):
+    state, alice, bob = table()
+    alice.capital = Coord(x=0, y=0)
+    put(state, alice, 5, 5, 200)
+    put(state, bob, 0, 0, 100)
+    alice.bot = True
+    roll(monkeypatch, 0.0)
+
+    state.plan_bots()
+
+    assert state.game.orders[0].target == Coord(x=4, y=5)
+
+
+def test_a_lost_capital_outranks_a_soft_neighbour(monkeypatch):
+    state, alice, bob = table()
+    alice.capital = Coord(x=0, y=0)
+    put(state, alice, 5, 5, 200)
+    put(state, bob, 6, 5, 10)
+    put(state, bob, 0, 0, 100)
+    alice.bot = True
+    roll(monkeypatch, 0.0)
+
+    state.plan_bots()
+
+    assert state.game.orders[0].target == Coord(x=4, y=5)
+
+
+def test_a_held_capital_leaves_the_plan_alone(monkeypatch):
+    state, alice, bob = table()
+    alice.capital = Coord(x=0, y=0)
+    put(state, alice, 5, 5, 200)
+    put(state, alice, 0, 0, 200)
+    put(state, bob, 6, 5, 10)
+    alice.bot = True
+    roll(monkeypatch, 0.0)
+
+    state.plan_bots()
+
+    targets = [
+        order.target for order in state.game.orders if (order.source.x, order.source.y) == (5, 5)
+    ]
+    assert Coord(x=6, y=5) in targets
+
+
+def test_a_rich_tile_splits_across_two_cheap_neighbours(monkeypatch):
+    state, alice, _ = table()
+    wet(state, 1, 1)
+    put(state, alice, 1, 0, 300)
+    state.tile(Coord(x=0, y=0)).soldiers = 60
+    state.tile(Coord(x=2, y=0)).soldiers = 90
+    roll(monkeypatch, 0.0)
+
+    targets = plan(state, alice).orders
+
+    assert [(order.target, order.soldiers) for order in targets] == [
+        (Coord(x=0, y=0), 150),
+        (Coord(x=2, y=0), 150),
+    ]
+
+
+def test_a_split_stops_at_the_guard_it_cannot_afford(monkeypatch):
+    state, alice, _ = table()
+    wet(state, 1, 1)
+    put(state, alice, 1, 0, 300)
+    state.tile(Coord(x=0, y=0)).soldiers = 60
+    state.tile(Coord(x=2, y=0)).soldiers = 90
+    state.tile(Coord(x=1, y=1)).kind = TileKind.LAND
+    state.tile(Coord(x=1, y=1)).soldiers = 200
+    roll(monkeypatch, 0.0)
+
+    assert len(plan(state, alice).orders) == 2
+
+
+def test_a_poor_tile_strikes_once(monkeypatch):
+    state, alice, _ = table()
+    wet(state, 1, 1)
+    put(state, alice, 1, 0, 200)
+    state.tile(Coord(x=0, y=0)).soldiers = 150
+    state.tile(Coord(x=2, y=0)).soldiers = 150
+    roll(monkeypatch, 0.0)
+
+    assert len(plan(state, alice).orders) == 1
+
+
+def test_a_split_takes_everything_it_can(monkeypatch):
+    state, alice, _ = table()
+    wet(state, 1, 1)
+    put(state, alice, 1, 0, 400)
+    state.tile(Coord(x=0, y=0)).soldiers = 50
+    state.tile(Coord(x=2, y=0)).soldiers = 50
+    state.tile(Coord(x=1, y=1)).kind = TileKind.LAND
+    state.tile(Coord(x=1, y=1)).soldiers = 50
+    roll(monkeypatch, 0.0)
+
+    orders = plan(state, alice).orders
+
+    assert len(orders) == 3
+    assert all(order.soldiers == 133 for order in orders)
+
+
+def test_a_split_rolls_against_its_own_share(monkeypatch):
+    state, alice, _ = table()
+    wet(state, 1, 1)
+    put(state, alice, 1, 0, 300)
+    state.tile(Coord(x=0, y=0)).soldiers = 60
+    state.tile(Coord(x=2, y=0)).soldiers = 90
+
+    roll(monkeypatch, 0.5)
+    assert plan(state, alice).orders
+
+    roll(monkeypatch, 0.8)
+    assert plan(state, alice).orders == []
+
+
+def test_a_split_is_planned_as_one_plan(monkeypatch):
+    state, alice, _ = table()
+    wet(state, 1, 1)
+    put(state, alice, 1, 0, 300)
+    state.tile(Coord(x=0, y=0)).soldiers = 60
+    state.tile(Coord(x=2, y=0)).soldiers = 90
+    roll(monkeypatch, 0.0)
+
+    assert plan(state, alice) == plan(state, alice)
+
+
+def test_a_bot_split_lands_through_the_state(monkeypatch):
+    state, alice, _ = table()
+    wet(state, 1, 1)
+    put(state, alice, 1, 0, 300)
+    state.tile(Coord(x=0, y=0)).soldiers = 60
+    state.tile(Coord(x=2, y=0)).soldiers = 90
+    alice.bot = True
+    roll(monkeypatch, 0.0)
+
+    state.plan_bots()
+
+    assert [(order.target, order.soldiers) for order in state.game.orders] == [
+        (Coord(x=0, y=0), 150),
+        (Coord(x=2, y=0), 150),
+    ]
+
+
+def test_a_bot_split_is_not_a_standing_order(monkeypatch):
+    state, alice, _ = table()
+    wet(state, 1, 1)
+    put(state, alice, 1, 0, 300)
+    state.tile(Coord(x=0, y=0)).soldiers = 60
+    state.tile(Coord(x=2, y=0)).soldiers = 90
+    alice.bot = True
+    roll(monkeypatch, 0.0)
+
+    state.plan_bots()
+
+    assert all(order.repeat is False for order in state.game.orders)
+
+
+def test_the_homeland_is_the_quarter_around_the_capital():
+    assert bot._homeland(10, Coord(x=0, y=0)) == (0, 4, 0, 4)
+    assert bot._homeland(10, Coord(x=9, y=9)) == (6, 10, 6, 10)
+    assert bot._homeland(10, Coord(x=9, y=0)) == (6, 10, 0, 4)
+    assert bot._homeland(10, Coord(x=0, y=9)) == (0, 4, 6, 10)
+
+
+def test_a_homeland_target_gets_a_second_roll():
+    home = bot._homeland(10, Coord(x=0, y=0))
+
+    assert bot._urge(200, 200, home, 1, 1) == 1.0
+    assert bot._urge(200, 200, home, 7, 7) == 0.5
+    assert bot._urge(200, 200, None, 1, 1) == 0.5
+
+
+def test_a_homeland_target_is_taken_at_double_the_odds(monkeypatch):
+    state, alice, _ = table()
+    alice.capital = Coord(x=0, y=0)
+    wet(state, 0, 1)
+    put(state, alice, 0, 0, 200)
+    state.tile(Coord(x=1, y=0)).soldiers = 200
+    roll(monkeypatch, 0.9)
+
+    assert plan(state, alice).orders[0].target == Coord(x=1, y=0)
+
+
+def test_the_same_odds_outside_the_homeland_hold(monkeypatch):
+    state, alice, _ = table()
+    alice.capital = Coord(x=0, y=0)
+    put(state, alice, 0, 0, 0)
+    put(state, alice, 6, 6, 200)
+    wet(state, 5, 6)
+    wet(state, 6, 7)
+    wet(state, 6, 5)
+    state.tile(Coord(x=7, y=6)).soldiers = 200
+    roll(monkeypatch, 0.9)
+
+    assert plan(state, alice).orders == []
+
+
+def test_the_field_halves_the_cost_of_homeland_ground():
+    state, alice, bob = table()
+    alice.capital = Coord(x=0, y=0)
+    home = bot._homeland(10, alice.capital)
+    for row in state.game.tiles:
+        for tile in row:
+            tile.owner = alice.id
+    put(state, bob, 0, 3, 100)
+    put(state, bob, 6, 3, 100)
+
+    dist = bot._distances(state.game, alice.id, alice.capital, home)
+
+    assert dist[3][3] == 3
+    assert bot._step(dist, 3, 3, 10) == (2, 3)
+
+
 def test_a_bot_order_never_stands(monkeypatch):
     state, alice, _ = table()
     block(state, alice)
@@ -394,7 +608,7 @@ def test_the_plan_is_the_same_every_time(monkeypatch):
 
 def test_a_new_plan_replaces_the_old_orders(monkeypatch):
     state, alice, _ = table()
-    put(state, alice, 0, 0, 200)
+    put(state, alice, 0, 0, 150)
     alice.bot = True
     roll(monkeypatch, 0.0)
     state.plan_bots()

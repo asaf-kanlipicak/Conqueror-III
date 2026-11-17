@@ -25,10 +25,12 @@ export enum CommandType {
   START = 'START',
   MAP = 'MAP',
   MOVE = 'MOVE',
+  SPLIT = 'SPLIT',
   CANCEL = 'CANCEL',
   BUILD = 'BUILD',
   CHAT = 'CHAT',
   END_TURN = 'END_TURN',
+  PAUSE = 'PAUSE',
   BOT = 'BOT',
   KICK = 'KICK',
   RESET = 'RESET'
@@ -62,6 +64,8 @@ export interface Player {
   online: boolean
   bot: boolean
   gold: number
+  capital: Coord | null
+  capital_lost: number
 }
 
 export interface Move {
@@ -89,6 +93,7 @@ export interface Game {
   turn: number
   round: number
   started: boolean
+  paused: boolean
   started_at: number | null
   winner: string | null
   log: string[]

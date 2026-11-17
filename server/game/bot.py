@@ -1,6 +1,6 @@
 import random
-from collections import deque
 from dataclasses import dataclass, field
+from heapq import heappop, heappush
 
 from game.constants import (
     BOT_FARM_FLOOR,
@@ -8,6 +8,8 @@ from game.constants import (
     BOT_FORT_RATIO,
     BUILDING_COST,
     FORT_DEFENSE,
+    HOMELAND_URGE,
+    RIVER_WIDTH,
 )
 from game.enums import BuildingKind, TileKind
 from game.models import Coord, Game, PendingOrder, Player, Tile
@@ -24,7 +26,8 @@ class Plan:
 def think(game: Game, player: Player) -> Plan:
     me = player.id
     size = game.size
-    dist = _distances(game, me)
+    home = _homeland(size, player.capital) if player.capital is not None else None
+    dist = _distances(game, me, player.capital, home)
     plan = Plan()
     held: list[tuple[int, int]] = []
 
@@ -36,17 +39,17 @@ def think(game: Game, player: Player) -> Plan:
             here = dist[y][x]
             if here < 0:
                 continue
-            if here == 1:
-                target = _strike(game, me, x, y, tile.soldiers)
-                if target is None:
+            if any(dist[ny][nx] == 0 for nx, ny in _around(x, y, size)):
+                targets = _strike(game, me, x, y, tile.soldiers, home)
+                if not targets:
                     held.append((x, y))
-                else:
+                for target in targets:
                     plan.orders.append(
                         PendingOrder(
                             player=me,
                             source=Coord(x=x, y=y),
                             target=target,
-                            soldiers=tile.soldiers,
+                            soldiers=tile.soldiers // len(targets),
                         )
                     )
                 continue
@@ -88,46 +91,115 @@ def _guard(tile: Tile) -> int:
     return tile.soldiers * FORT_DEFENSE if BuildingKind.FORT in tile.buildings else tile.soldiers
 
 
-def _distances(game: Game, me: str) -> list[list[int]]:
+def _homeland(size: int, capital: Coord) -> tuple[int, int, int, int]:
+    start = (size - RIVER_WIDTH) // 2
+    end = start + RIVER_WIDTH
+    x0, x1 = (0, start) if capital.x < start else (end, size)
+    y0, y1 = (0, start) if capital.y < start else (end, size)
+    return x0, x1, y0, y1
+
+
+def _home(home: tuple[int, int, int, int] | None, x: int, y: int) -> bool:
+    if home is None:
+        return False
+    x0, x1, y0, y1 = home
+    return x0 <= x < x1 and y0 <= y < y1
+
+
+def _distances(
+    game: Game,
+    me: str,
+    capital: Coord | None = None,
+    home: tuple[int, int, int, int] | None = None,
+) -> list[list[int]]:
     size = game.size
     dist = [[-1] * size for _ in range(size)]
-    queue: deque[tuple[int, int]] = deque()
-    for y in range(size):
-        for x in range(size):
-            if _target(game.tiles[y][x], me):
-                dist[y][x] = 0
-                queue.append((x, y))
-    while queue:
-        x, y = queue.popleft()
+    heap: list[tuple[int, int, int]] = []
+
+    def push(col: int, row: int, weight: int) -> None:
+        if dist[row][col] == -1 or weight < dist[row][col]:
+            dist[row][col] = weight
+            heappush(heap, (weight, row, col))
+
+    if capital is not None and game.tiles[capital.y][capital.x].owner != me:
+        push(capital.x, capital.y, 0)
+    else:
+        for y in range(size):
+            for x in range(size):
+                if _target(game.tiles[y][x], me):
+                    push(x, y, 0)
+    while heap:
+        cost, y, x = heappop(heap)
+        if cost > dist[y][x]:
+            continue
         for nx, ny in _around(x, y, size):
-            if dist[ny][nx] == -1:
-                dist[ny][nx] = dist[y][x] + 1
-                queue.append((nx, ny))
+            step = 1 if _home(home, nx, ny) else 2
+            if dist[ny][nx] == -1 or cost + step < dist[ny][nx]:
+                dist[ny][nx] = cost + step
+                heappush(heap, (cost + step, ny, nx))
     return dist
 
 
-def _strike(game: Game, me: str, x: int, y: int, soldiers: int) -> Coord | None:
+def _ways(soldiers: int, targets: list[tuple[int, int, int, int]]) -> int:
+    ways = 1
+    while ways < len(targets) and soldiers // (ways + 1) >= targets[ways][0]:
+        ways += 1
+    return ways
+
+
+def _strike(
+    game: Game,
+    me: str,
+    x: int,
+    y: int,
+    soldiers: int,
+    home: tuple[int, int, int, int] | None = None,
+) -> list[Coord]:
     targets = []
     for nx, ny in _around(x, y, game.size):
         tile = game.tiles[ny][nx]
         if _target(tile, me):
             targets.append((_guard(tile), -tile.loot, ny, nx))
     if not targets:
-        return None
+        return []
     targets.sort()
-    chances = [soldiers / (soldiers + guard) for guard, _, _, _ in targets]
+    ways = _ways(soldiers, targets)
+    if ways == 1:
+        return _pick_one(targets, soldiers, home)
+    share = soldiers // ways
+    chosen = targets[:ways]
+    chances = [_urge(share, guard, home, nx, ny) for guard, _, ny, nx in chosen]
+    if random.random() >= max(chances):
+        return []
+    return [Coord(x=target[3], y=target[2]) for target in chosen]
+
+
+def _urge(
+    soldiers: int, guard: int, home: tuple[int, int, int, int] | None, x: int, y: int
+) -> float:
+    chance = soldiers / (soldiers + guard)
+    if _home(home, x, y):
+        chance *= HOMELAND_URGE
+    return min(1.0, chance)
+
+
+def _pick_one(
+    targets: list[tuple[int, int, int, int]],
+    soldiers: int,
+    home: tuple[int, int, int, int] | None = None,
+) -> list[Coord]:
+    chances = [_urge(soldiers, guard, home, nx, ny) for guard, _, ny, nx in targets]
     best = max(chances)
     roll = random.random()
     if roll >= best:
-        return None
+        return []
     pick = roll / best * sum(chances)
-    chosen = targets[-1]
     for target, chance in zip(targets, chances):
         pick -= chance
         if pick < 0:
-            chosen = target
-            break
-    return Coord(x=chosen[3], y=chosen[2])
+            return [Coord(x=target[3], y=target[2])]
+    last = targets[-1]
+    return [Coord(x=last[3], y=last[2])]
 
 
 def _step(dist: list[list[int]], x: int, y: int, size: int) -> tuple[int, int] | None:

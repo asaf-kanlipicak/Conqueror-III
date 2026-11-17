@@ -26,10 +26,12 @@ function App() {
     addBot,
     kick,
     order,
+    split,
     cancel,
     build,
     chat,
-    endTurn
+    endTurn,
+    pause
   } = useGame()
   const [picked, setPicked] = useState<Coord | null>(null)
 
@@ -62,6 +64,7 @@ function App() {
             game={game}
             myId={myId}
             onOrder={order}
+            onSplit={split}
             onCancel={cancel}
             onPick={setPicked}
           />
@@ -82,6 +85,7 @@ function App() {
           onOrder={order}
           onCancelOrder={cancel}
           onEndTurn={endTurn}
+          onPause={pause}
           onReset={reset}
         />
         <Chat game={game} me={me} onChat={chat} />
