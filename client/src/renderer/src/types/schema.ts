@@ -26,6 +26,7 @@ export enum CommandType {
   MAP = 'MAP',
   MOVE = 'MOVE',
   SPLIT = 'SPLIT',
+  STAND = 'STAND',
   CANCEL = 'CANCEL',
   BUILD = 'BUILD',
   CHAT = 'CHAT',
@@ -77,6 +78,7 @@ export interface PendingOrder extends Move {
   player: string
   soldiers: number
   repeat: boolean
+  parts: number
 }
 
 export interface ChatLine {

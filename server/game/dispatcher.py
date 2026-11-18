@@ -16,6 +16,7 @@ from game.schemas import (
     PauseData,
     ResumeData,
     SplitData,
+    StandData,
     StartData,
 )
 from game.state import State, StateError
@@ -28,6 +29,7 @@ class CommandType(StrEnum):
     MAP = "MAP"
     MOVE = "MOVE"
     SPLIT = "SPLIT"
+    STAND = "STAND"
     CANCEL = "CANCEL"
     BUILD = "BUILD"
     CHAT = "CHAT"
@@ -55,6 +57,7 @@ class Command(BaseModel):
         | MoveData
         | SplitData
         | CancelData
+        | StandData
         | BuildData
         | ResumeData
         | ChatData
@@ -87,6 +90,7 @@ class Dispatcher:
             CommandType.MAP: self.dispatch_map,
             CommandType.MOVE: self.dispatch_move,
             CommandType.SPLIT: self.dispatch_split,
+            CommandType.STAND: self.dispatch_stand,
             CommandType.CANCEL: self.dispatch_cancel,
             CommandType.BUILD: self.dispatch_build,
             CommandType.CHAT: self.dispatch_chat,
@@ -145,6 +149,14 @@ class Dispatcher:
             raise StateError("a source and a target list are required")
         self.state.split_order(
             self._require_player(player_id), command.data.source, command.data.targets
+        )
+        await self._broadcast_game()
+
+    async def dispatch_stand(self, player_id: str | None, command: Command) -> None:
+        if not isinstance(command.data, StandData):
+            raise StateError("a source and a standing flag are required")
+        self.state.set_repeat(
+            self._require_player(player_id), command.data.source, command.data.standing
         )
         await self._broadcast_game()
 

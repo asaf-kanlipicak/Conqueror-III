@@ -192,12 +192,32 @@ def test_orders_are_validated(game):
         order(state, alice, (19, 19), (18, 19))
     with pytest.raises(StateError, match="not adjacent"):
         order(state, alice, (0, 0), (5, 5))
-    with pytest.raises(StateError, match="no soldiers"):
-        state.tile(Coord(x=0, y=0)).soldiers = 0
-        order(state, alice, (0, 0), (1, 0))
     state.tile(Coord(x=0, y=0)).soldiers = 5
     order(state, bob, (19, 19), (18, 19))
     assert [pending.target for pending in state.game.orders] == [Coord(x=18, y=19)]
+
+
+def test_an_empty_tile_can_be_ordered_from(game):
+    state, alice, _ = game
+    state.tile(Coord(x=0, y=0)).soldiers = 0
+
+    order(state, alice, (0, 0), (1, 0))
+
+    assert state.game.orders[0].soldiers == 0
+
+
+def test_a_standing_order_from_an_empty_tile_fills_in(game):
+    state, alice, bob = game
+    state.tile(Coord(x=0, y=0)).soldiers = 0
+    state.tile(Coord(x=1, y=0)).soldiers = 0
+    order(state, alice, (0, 0), (1, 0), repeat=True)
+
+    state.end_turn(alice.id)
+    state.end_turn(bob.id)
+    state.end_turn(alice.id)
+
+    assert state.tile(Coord(x=1, y=0)).owner == alice.id
+    assert state.tile(Coord(x=1, y=0)).soldiers == PRODUCTION
 
 
 def test_a_second_order_from_the_same_tile_replaces_the_first(game):
@@ -633,7 +653,7 @@ def test_a_player_cannot_cancel_someone_elses_order(game):
     assert len(state.game.orders) == 1
 
 
-def test_a_snapshot_ignores_production(game):
+def test_an_order_given_between_turns_picks_up_production(game):
     state, alice, bob = game
     empty = state.tile(Coord(x=1, y=0))
     empty.soldiers = 0
@@ -642,9 +662,22 @@ def test_a_snapshot_ignores_production(game):
     state.end_turn(bob.id)
     assert state.tile(Coord(x=0, y=0)).soldiers == START + PRODUCTION
     state.end_turn(alice.id)
-    assert "alice walked into (1, 0) with 210" in state.game.log[-1]
-    assert empty.soldiers == 210
-    assert state.tile(Coord(x=0, y=0)).soldiers == PRODUCTION
+    assert f"alice walked into (1, 0) with {START + PRODUCTION}" in state.game.log[-1]
+    assert empty.soldiers == START + PRODUCTION
+    assert state.tile(Coord(x=0, y=0)).soldiers == 0
+
+
+def test_an_order_given_out_of_turn_picks_up_the_tile(game):
+    state, alice, bob = game
+    empty = state.tile(Coord(x=1, y=0))
+    empty.soldiers = 0
+    state.end_turn(alice.id)
+    state.tile(Coord(x=0, y=0)).soldiers = 0
+    order(state, alice, (0, 0), (1, 0))
+
+    state.end_turn(bob.id)
+
+    assert state.game.orders[0].soldiers == PRODUCTION
 
 
 def test_two_stacks_can_take_one_tile_in_a_round(game, monkeypatch):

@@ -140,13 +140,6 @@ def _distances(
     return dist
 
 
-def _ways(soldiers: int, targets: list[tuple[int, int, int, int]]) -> int:
-    ways = 1
-    while ways < len(targets) and soldiers // (ways + 1) >= targets[ways][0]:
-        ways += 1
-    return ways
-
-
 def _strike(
     game: Game,
     me: str,
@@ -159,19 +152,19 @@ def _strike(
     for nx, ny in _around(x, y, game.size):
         tile = game.tiles[ny][nx]
         if _target(tile, me):
-            targets.append((_guard(tile), -tile.loot, ny, nx))
-    if not targets:
+            targets.append((-_urge(soldiers, _guard(tile), home, nx, ny), -tile.loot, ny, nx))
+    if not targets or soldiers < 1:
         return []
     targets.sort()
-    ways = _ways(soldiers, targets)
-    if ways == 1:
-        return _pick_one(targets, soldiers, home)
-    share = soldiers // ways
-    chosen = targets[:ways]
-    chances = [_urge(share, guard, home, nx, ny) for guard, _, ny, nx in chosen]
-    if random.random() >= max(chances):
-        return []
-    return [Coord(x=target[3], y=target[2]) for target in chosen]
+    chosen: list[Coord] = []
+    for _, _, ny, nx in targets:
+        share = soldiers // (len(chosen) + 1)
+        if share < 1:
+            break
+        if random.random() >= _urge(share, _guard(game.tiles[ny][nx]), home, nx, ny):
+            continue
+        chosen.append(Coord(x=nx, y=ny))
+    return chosen
 
 
 def _urge(
@@ -181,25 +174,6 @@ def _urge(
     if _home(home, x, y):
         chance *= HOMELAND_URGE
     return min(1.0, chance)
-
-
-def _pick_one(
-    targets: list[tuple[int, int, int, int]],
-    soldiers: int,
-    home: tuple[int, int, int, int] | None = None,
-) -> list[Coord]:
-    chances = [_urge(soldiers, guard, home, nx, ny) for guard, _, ny, nx in targets]
-    best = max(chances)
-    roll = random.random()
-    if roll >= best:
-        return []
-    pick = roll / best * sum(chances)
-    for target, chance in zip(targets, chances):
-        pick -= chance
-        if pick < 0:
-            return [Coord(x=target[3], y=target[2])]
-    last = targets[-1]
-    return [Coord(x=last[3], y=last[2])]
 
 
 def _step(dist: list[list[int]], x: int, y: int, size: int) -> tuple[int, int] | None:

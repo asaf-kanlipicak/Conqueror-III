@@ -34,6 +34,11 @@ class CancelData(Data):
     at: Coord | None = None
 
 
+class StandData(Data):
+    source: Coord
+    standing: bool
+
+
 class BuildData(Data):
     source: Coord
     building: BuildingKind

@@ -32,8 +32,8 @@ export interface GameSession {
   reset: () => void
   addBot: () => void
   kick: (seat: string) => void
-  order: (source: Coord, target: Coord, repeat?: boolean) => void
   split: (source: Coord, targets: Coord[]) => void
+  stand: (source: Coord, standing: boolean) => void
   cancel: (source: Coord, at?: Coord) => void
   build: (source: Coord, building: BuildingKind) => void
   chat: (text: string) => void
@@ -161,12 +161,8 @@ export function useGame(): GameSession {
   const reset = useCallback(() => send(CommandType.RESET), [send])
   const addBot = useCallback(() => send(CommandType.BOT), [send])
   const kick = useCallback((seat: string) => send(CommandType.KICK, { seat }), [send])
-  const order = useCallback(
-    (source: Coord, target: Coord, repeat?: boolean) =>
-      send(CommandType.MOVE, repeat === undefined ? { source, target } : { source, target, repeat }),
-    [send]
-  )
   const split = useCallback((source: Coord, targets: Coord[]) => send(CommandType.SPLIT, { source, targets }), [send])
+  const stand = useCallback((source: Coord, standing: boolean) => send(CommandType.STAND, { source, standing }), [send])
   const cancel = useCallback(
     (source: Coord, at?: Coord) => send(CommandType.CANCEL, at === undefined ? { source } : { source, at }),
     [send]
@@ -193,8 +189,8 @@ export function useGame(): GameSession {
     reset,
     addBot,
     kick,
-    order,
     split,
+    stand,
     cancel,
     build,
     chat,

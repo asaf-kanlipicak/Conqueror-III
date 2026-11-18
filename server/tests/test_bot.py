@@ -101,7 +101,7 @@ def test_a_fort_halves_the_odds(monkeypatch):
     assert plan(state, alice).orders
 
 
-def test_a_free_tile_outweighs_a_contested_one(monkeypatch):
+def test_a_free_tile_is_taken_before_a_contested_one(monkeypatch):
     state, alice, _ = table()
     put(state, alice, 0, 0, 100)
     free = state.tile(Coord(x=1, y=0))
@@ -110,24 +110,30 @@ def test_a_free_tile_outweighs_a_contested_one(monkeypatch):
     state.tile(Coord(x=0, y=1)).soldiers = 100
 
     roll(monkeypatch, 0.3)
-    assert plan(state, alice).orders[0].target == Coord(x=1, y=0)
+    assert [order.target for order in plan(state, alice).orders] == [
+        Coord(x=1, y=0),
+        Coord(x=0, y=1),
+    ]
 
     roll(monkeypatch, 0.9)
-    assert plan(state, alice).orders[0].target == Coord(x=0, y=1)
+    assert [order.target for order in plan(state, alice).orders] == [Coord(x=1, y=0)]
 
 
-def test_a_tie_is_split_by_the_pile(monkeypatch):
+def test_an_equal_appetite_is_ordered_by_the_pile(monkeypatch):
     state, alice, _ = table()
     wet(state, 1, 1)
     put(state, alice, 1, 0, 150)
     state.tile(Coord(x=0, y=0)).loot = 40
     state.tile(Coord(x=2, y=0)).loot = 60
 
-    roll(monkeypatch, 0.1)
-    assert plan(state, alice).orders[0].target == Coord(x=2, y=0)
-
     roll(monkeypatch, 0.5)
-    assert plan(state, alice).orders[0].target == Coord(x=0, y=0)
+    assert [order.target for order in plan(state, alice).orders] == [Coord(x=2, y=0)]
+
+    roll(monkeypatch, 0.3)
+    assert [order.target for order in plan(state, alice).orders] == [
+        Coord(x=2, y=0),
+        Coord(x=0, y=0),
+    ]
 
 
 def test_no_neighbour_means_no_strike():
@@ -167,8 +173,9 @@ def test_every_tile_acts_once(monkeypatch):
 
     result = plan(state, alice)
 
-    assert len(result.orders) == 9
     assert len({(order.source.x, order.source.y) for order in result.orders}) == 9
+    legs = [(order.source.x, order.source.y, order.target.x, order.target.y) for order in result.orders]
+    assert len(set(legs)) == len(legs)
 
 
 def test_open_water_is_a_bridge():
@@ -404,7 +411,7 @@ def test_a_rich_tile_splits_across_two_cheap_neighbours(monkeypatch):
     ]
 
 
-def test_a_split_stops_at_the_guard_it_cannot_afford(monkeypatch):
+def test_a_leg_beyond_the_share_needs_its_own_roll(monkeypatch):
     state, alice, _ = table()
     wet(state, 1, 1)
     put(state, alice, 1, 0, 300)
@@ -412,20 +419,26 @@ def test_a_split_stops_at_the_guard_it_cannot_afford(monkeypatch):
     state.tile(Coord(x=2, y=0)).soldiers = 90
     state.tile(Coord(x=1, y=1)).kind = TileKind.LAND
     state.tile(Coord(x=1, y=1)).soldiers = 200
-    roll(monkeypatch, 0.0)
 
+    roll(monkeypatch, 0.4)
     assert len(plan(state, alice).orders) == 2
 
+    roll(monkeypatch, 0.2)
+    assert len(plan(state, alice).orders) == 3
 
-def test_a_poor_tile_strikes_once(monkeypatch):
+
+def test_an_even_fight_can_still_be_gambled_on(monkeypatch):
     state, alice, _ = table()
     wet(state, 1, 1)
     put(state, alice, 1, 0, 200)
     state.tile(Coord(x=0, y=0)).soldiers = 150
     state.tile(Coord(x=2, y=0)).soldiers = 150
-    roll(monkeypatch, 0.0)
 
+    roll(monkeypatch, 0.5)
     assert len(plan(state, alice).orders) == 1
+
+    roll(monkeypatch, 0.3)
+    assert len(plan(state, alice).orders) == 2
 
 
 def test_a_split_takes_everything_it_can(monkeypatch):
@@ -444,7 +457,7 @@ def test_a_split_takes_everything_it_can(monkeypatch):
     assert all(order.soldiers == 133 for order in orders)
 
 
-def test_a_split_rolls_against_its_own_share(monkeypatch):
+def test_each_leg_is_rolled_at_its_own_share(monkeypatch):
     state, alice, _ = table()
     wet(state, 1, 1)
     put(state, alice, 1, 0, 300)
@@ -452,9 +465,12 @@ def test_a_split_rolls_against_its_own_share(monkeypatch):
     state.tile(Coord(x=2, y=0)).soldiers = 90
 
     roll(monkeypatch, 0.5)
-    assert plan(state, alice).orders
+    assert len(plan(state, alice).orders) == 2
 
     roll(monkeypatch, 0.8)
+    assert [order.target for order in plan(state, alice).orders] == [Coord(x=0, y=0)]
+
+    roll(monkeypatch, 0.9)
     assert plan(state, alice).orders == []
 
 
@@ -612,7 +628,7 @@ def test_a_new_plan_replaces_the_old_orders(monkeypatch):
     alice.bot = True
     roll(monkeypatch, 0.0)
     state.plan_bots()
-    assert len(state.game.orders) == 1
+    assert len(state.game.orders) == 2
 
     state.game.tiles[0][0].owner = None
     state.plan_bots()
@@ -666,7 +682,8 @@ def test_add_bot_seats_one_with_a_free_colour():
     assert first.bot is True and second.bot is True
     assert first.name != second.name
     assert {first.name, second.name} <= set(BOT_NAMES)
-    assert {first.color, second.color} == {PlayerColor.GREEN, PlayerColor.BLUE}
+    assert first.color != second.color
+    assert first.color != PlayerColor.RED and second.color != PlayerColor.RED
     assert alice in state.game.players
     assert f"{first.name} joined as {first.color}" in state.game.log
 
@@ -703,6 +720,17 @@ def test_a_bot_name_is_drawn_from_the_free_ones(monkeypatch):
     monkeypatch.setattr(random, "choice", lambda names: names[-1])
 
     assert state.add_bot().name == BOT_NAMES[-1]
+
+
+def test_a_bot_colour_is_drawn_from_the_free_ones(monkeypatch):
+    state = State()
+    state.join("alice", PlayerColor.RED)
+    monkeypatch.setattr(random, "choice", lambda options: options[0])
+
+    seated = state.add_bot()
+
+    assert seated.color == PlayerColor.GREEN
+    assert seated.color != PlayerColor.RED
 
 
 def test_a_full_table_gets_four_different_names():

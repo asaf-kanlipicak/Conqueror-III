@@ -140,7 +140,7 @@ class State:
         if len(self.game.players) >= len(_seats(BOARD_SIZE)):
             raise StateError("the game is full")
         taken = {player.color for player in self.game.players}
-        color = next(color for color in PlayerColor if color not in taken)
+        color = random.choice([color for color in PlayerColor if color not in taken])
         names = {player.name for player in self.game.players}
         name = random.choice([name for name in BOT_NAMES if name not in names])
         player = Player(id=uuid.uuid4().hex[:8], name=name, color=color, bot=True)
@@ -257,8 +257,6 @@ class State:
         tile = self.tile(source)
         if tile.owner != player.id:
             raise StateError("you do not own that tile")
-        if tile.soldiers == 0:
-            raise StateError("that tile has no soldiers")
         if abs(source.x - target.x) + abs(source.y - target.y) != 1:
             raise StateError("those tiles are not adjacent")
         target_tile = self.tile(target)
@@ -282,8 +280,6 @@ class State:
         tile = self.tile(source)
         if tile.owner != player.id:
             raise StateError("you do not own that tile")
-        if tile.soldiers == 0:
-            raise StateError("that tile has no soldiers")
         picked: list[Coord] = []
         for target in targets:
             self.tile(target)
@@ -295,8 +291,13 @@ class State:
             self.game.orders = [order for order in self.game.orders if order.source != source]
             return
         share = tile.soldiers // len(picked)
-        if share == 0:
+        if share == 0 and tile.soldiers > 0:
             raise StateError("too few soldiers to split that many ways")
+        kept = {
+            (order.target.x, order.target.y): order.repeat
+            for order in self.game.orders
+            if order.source == source and order.player == player.id
+        }
         self.game.orders = [order for order in self.game.orders if order.source != source]
         for target in picked:
             if target == source:
@@ -307,8 +308,22 @@ class State:
                     source=source,
                     target=target,
                     soldiers=share,
+                    repeat=kept.get((target.x, target.y), self.tile(target).owner == player.id),
+                    parts=len(picked),
                 )
             )
+
+    def set_repeat(self, player_id: str, source: Coord, repeat: bool) -> None:
+        player = self._playing(player_id)
+        legs = [
+            order
+            for order in self.game.orders
+            if order.source == source and order.player == player.id
+        ]
+        if not legs:
+            raise StateError("that tile has no order")
+        for order in legs:
+            order.repeat = repeat
 
     def remove_order(
         self, player_id: str, source: Coord, target: Coord | None = None
@@ -394,12 +409,6 @@ class State:
         if self.game.paused:
             raise StateError("the game is paused")
         player = self._require_turn(player_id)
-        for order in self.game.orders:
-            if order.player != player.id or not order.repeat:
-                continue
-            source = self.tile(order.source)
-            if source.owner == player.id:
-                order.soldiers = source.soldiers
         kept = []
         for order in self.game.orders:
             if order.player != player.id:
@@ -584,9 +593,18 @@ class State:
                 skipped.append(player.name)
                 continue
             self.game.turn = index
+            self._refresh_orders(player)
             for name in skipped:
                 self._log(f"{name}'s turn skipped, offline")
             return
+
+    def _refresh_orders(self, player: Player) -> None:
+        for order in self.game.orders:
+            if order.player != player.id:
+                continue
+            source = self.tile(order.source)
+            if source.owner == player.id:
+                order.soldiers = source.soldiers // order.parts
 
     def _produce(self) -> None:
         for player in self.game.players:

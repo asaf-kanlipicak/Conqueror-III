@@ -1,10 +1,10 @@
-import { useMemo, useRef, useState } from 'react'
+import { CSSProperties, KeyboardEvent, MouseEvent, useMemo, useRef, useState } from 'react'
 import { BuildingKind, Coord, Game, PendingOrder, Tile, TileKind } from '../types/schema'
 import { INK, NEUTRAL_FILL, PALETTE, WATER_FILL } from '../utils/palette'
 import {
   boardSpan,
   capitalOf,
-  clickTile,
+  clearsPlan,
   guardOf,
   isAdjacent,
   isAttack,
@@ -12,15 +12,14 @@ import {
   orderArrow,
   orderCount,
   sameCoord,
+  stepCursor,
   TILE_SIZE
 } from '../lib/board'
 
 interface BoardProps {
   game: Game
   myId: string | null
-  onOrder: (source: Coord, target: Coord) => void
   onSplit: (source: Coord, targets: Coord[]) => void
-  onCancel: (source: Coord, target?: Coord) => void
   onPick: (coord: Coord) => void
 }
 
@@ -30,8 +29,8 @@ interface Tip {
   text: string
 }
 
-export function Board({ game, myId, onOrder, onSplit, onCancel, onPick }: BoardProps) {
-  const [selected, setSelected] = useState<Coord | null>(null)
+export function Board({ game, myId, onSplit, onPick }: BoardProps) {
+  const [picked, setPicked] = useState<Coord | null>(null)
   const [split, setSplit] = useState<Coord[]>([])
   const [hovered, setHovered] = useState<Coord | null>(null)
   const [tip, setTip] = useState<Tip | null>(null)
@@ -50,54 +49,87 @@ export function Board({ game, myId, onOrder, onSplit, onCancel, onPick }: BoardP
 
   const tileAt = (coord: Coord): Tile => game.tiles[coord.y][coord.x]
 
+  const mine = (coord: Coord): boolean => myId !== null && tileAt(coord).owner === myId
+
   const mineAt = (coord: Coord): PendingOrder[] =>
     orders.filter((order) => order.player === myId && sameCoord(order.source, coord))
 
-  const click = (coord: Coord): void => {
-    onPick(coord)
-    if (!canPlay) return
-    const from = mineAt(coord)
-    const action = clickTile(selected, coord, tileAt(coord).owner === myId, from.length > 0)
-    if (action.kind === 'select') {
-      setSelected(action.coord)
-      setSplit(action.coord ? from.map((order) => order.target) : [])
-      return
-    }
-    if (action.kind === 'cancel') onCancel(action.source)
-    else onOrder(action.source, action.target)
-    setSelected(null)
+  const clearPlan = (coord: Coord): boolean => {
+    if (!clearsPlan(picked, coord, mine(coord), mineAt(coord).length)) return false
     setSplit([])
+    onSplit(coord, [])
+    return true
   }
 
-  const rightClick = (event: React.MouseEvent, coord: Coord): void => {
+  const pick = (coord: Coord): void => {
+    onPick(coord)
+    if (clearPlan(coord)) return
+    setPicked(coord)
+    setSplit(mine(coord) ? mineAt(coord).map((order) => order.target) : [])
+  }
+
+  const moveCursor = (key: string): void => {
+    const next = stepCursor(picked ?? { x: 0, y: 0 }, key, side)
+    if (!next) return
+    setHovered(next)
+    pick(next)
+  }
+
+  const keyDown = (event: KeyboardEvent): void => {
+    if (event.key.startsWith('Arrow')) {
+      event.preventDefault()
+      moveCursor(event.key)
+      return
+    }
+    if (event.key === 'Delete' || event.key === 'Backspace') {
+      event.preventDefault()
+      if (picked) clearPlan(picked)
+      return
+    }
+    if (event.key === 'Escape') {
+      setPicked(null)
+      setSplit([])
+    }
+  }
+
+  const rightClick = (event: MouseEvent, coord: Coord): void => {
     event.preventDefault()
-    if (!canPlay || !selected) return
-    if (!sameCoord(selected, coord) && !isAdjacent(selected, coord)) return
+    if (!canPlay || !picked || !mine(picked)) return
+    if (!sameCoord(picked, coord) && !isAdjacent(picked, coord)) return
     const next = split.some((target) => sameCoord(target, coord))
       ? split.filter((target) => !sameCoord(target, coord))
       : [...split, coord]
     setSplit(next)
-    onSplit(selected, next)
+    onSplit(picked, next)
   }
 
-  const caption = ((): string => {
-    if (!game.started) return 'the table is being set'
-    if (game.winner) return 'the war is over'
-    if (game.paused) return 'the game is paused'
-    if (!me) return 'watching from the rail'
-    if (me.eliminated) return 'you are out'
-    if (!selected) return 'pick one of your tiles'
-    const source = tileAt(selected)
+  const caption = ((): { line: string; hint: string } => {
+    const quiet = (line: string, hint = '') => ({ line, hint })
+    if (!game.started) return quiet('the table is being set')
+    if (game.winner) return quiet('the war is over')
+    if (game.paused) return quiet('the game is paused')
+    if (!me) return quiet('watching from the rail')
+    if (me.eliminated) return quiet('you are out')
+    if (!picked) return quiet('click any tile to read it', 'right-click a neighbour to order')
+    const source = tileAt(picked)
+    if (!mine(picked)) {
+      return quiet(source.soldiers > 0 ? `${source.soldiers} soldiers · not yours` : 'empty · not yours')
+    }
+    const ordered = mineAt(picked).length
+    const hint = ordered > 0 ? 'click again to clear' : ''
     if (split.length > 1) {
       const share = Math.floor(source.soldiers / split.length)
-      return `${source.soldiers} soldiers · ${split.length} ways · ${share} each`
+      return { line: `${source.soldiers} soldiers · ${split.length} ways · ${share} each`, hint }
     }
-    if (!hovered || !isAdjacent(selected, hovered)) return `${source.soldiers} soldiers · pick a neighbour`
+    if (!hovered || !isAdjacent(picked, hovered)) {
+      const line = ordered > 0 ? `${source.soldiers} soldiers · ${ordered} ordered` : `${source.soldiers} soldiers`
+      return { line, hint: hint || 'right-click a neighbour' }
+    }
     const target = tileAt(hovered)
-    if (target.owner === myId) return `${source.soldiers} soldiers joining ${target.soldiers}`
-    if (target.soldiers === 0) return `walk in with ${source.soldiers}`
+    if (target.owner === myId) return { line: `${source.soldiers} soldiers joining ${target.soldiers}`, hint }
+    if (target.soldiers === 0) return { line: `walk in with ${source.soldiers}`, hint }
     const chance = Math.round(odds(source.soldiers, guardOf(target)) * 100)
-    return `${source.soldiers} vs ${target.soldiers} · ${chance}% to win the exchange`
+    return { line: `${source.soldiers} vs ${target.soldiers} · ${chance}% to win the exchange`, hint }
   })()
 
   const orderTip = (order: PendingOrder): string => {
@@ -117,11 +149,13 @@ export function Board({ game, myId, onOrder, onSplit, onCancel, onPick }: BoardP
   }
 
   return (
-    <div className="board-frame">
+    <div className="board-frame" style={{ '--span': `${span}px` } as CSSProperties}>
       <div className="board-area" ref={area}>
         <div
           className={`board${canPlay ? ' playable' : ''}`}
           style={{ gridTemplateColumns: `repeat(${side}, ${TILE_SIZE}px)` }}
+          tabIndex={0}
+          onKeyDown={keyDown}
           onMouseLeave={() => setHovered(null)}
         >
           {game.tiles.map((row, y) =>
@@ -140,8 +174,11 @@ export function Board({ game, myId, onOrder, onSplit, onCancel, onPick }: BoardP
                 !tile.owner && tile.kind === TileKind.LAND ? 'neutral' : '',
                 digits > 3 ? 'd4' : digits > 2 ? 'd3' : '',
                 tile.buildings.includes(BuildingKind.FORT) ? 'fort' : '',
-                selected && sameCoord(selected, coord) ? 'selected' : '',
-                hovered && sameCoord(hovered, coord) && selected && isAdjacent(selected, coord) ? 'target' : '',
+                tile.buildings.includes(BuildingKind.FARM) ? 'farm' : '',
+                picked && sameCoord(picked, coord) ? 'picked' : '',
+                hovered && sameCoord(hovered, coord) && picked && mine(picked) && isAdjacent(picked, coord)
+                  ? 'target'
+                  : '',
                 split.some((target) => sameCoord(target, coord)) ? 'splitting' : '',
                 queued ? 'queued' : ''
               ]
@@ -150,8 +187,8 @@ export function Board({ game, myId, onOrder, onSplit, onCancel, onPick }: BoardP
                   key={`${x}:${y}`}
                   data-coord={`${x},${y}`}
                   className={classes.filter(Boolean).join(' ')}
-                  style={{ backgroundColor: fill, color: swatch ? swatch.ink : INK }}
-                  onClick={() => click(coord)}
+                  style={{ backgroundColor: fill, color: swatch ? swatch.ink : INK, '--fill': fill } as CSSProperties}
+                  onClick={() => pick(coord)}
                   onContextMenu={(event) => rightClick(event, coord)}
                   onMouseEnter={() => setHovered(coord)}
                 >
@@ -221,12 +258,11 @@ export function Board({ game, myId, onOrder, onSplit, onCancel, onPick }: BoardP
         )}
       </div>
       <p className="caption">
-        <span>{caption}</span>
-        {hovered && (
-          <span className="coord">
-            ({hovered.x}, {hovered.y})
-          </span>
-        )}
+        <span className="state">{caption.line}</span>
+        <span className="footer">
+          <span className="hint">{caption.hint}</span>
+          <span className="coord">{hovered ? `(${hovered.x}, ${hovered.y})` : ''}</span>
+        </span>
       </p>
     </div>
   )

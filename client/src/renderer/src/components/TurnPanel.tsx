@@ -7,7 +7,7 @@ interface TurnPanelProps {
   myId: string | null
   myTurn: boolean
   orders: PendingOrder[]
-  onOrder: (source: Coord, target: Coord, repeat: boolean) => void
+  onStand: (source: Coord, standing: boolean) => void
   onCancelOrder: (source: Coord, target?: Coord) => void
   onEndTurn: () => void
   onPause: (paused: boolean) => void
@@ -19,7 +19,7 @@ export function TurnPanel({
   myId,
   myTurn,
   orders,
-  onOrder,
+  onStand,
   onCancelOrder,
   onEndTurn,
   onPause,
@@ -60,7 +60,7 @@ export function TurnPanel({
           <p className="turn-line">
             {game.paused ? 'on hold' : myTurn ? 'your move' : `waiting for ${active?.name ?? '…'}`}
           </p>
-          <OrderList game={game} myId={myId} orders={orders} onOrder={onOrder} onCancel={onCancelOrder} />
+          <OrderList game={game} myId={myId} orders={orders} onStand={onStand} onCancel={onCancelOrder} />
           <button className="btn" disabled={!myTurn || game.paused} onClick={onEndTurn}>
             {game.paused
               ? 'the game is paused'

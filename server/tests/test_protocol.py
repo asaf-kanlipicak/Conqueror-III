@@ -435,6 +435,32 @@ def test_a_finished_game_can_be_started_again(client):
         assert game["tiles"][0][0]["buildings"] == ["fort"]
 
 
+def test_standing_a_split_keeps_both_legs(client):
+    with client.websocket_connect("/ws") as alice, client.websocket_connect("/ws") as bob:
+        receive_until(alice, "CONNECT_SUCCESS")
+        receive_until(bob, "CONNECT_SUCCESS")
+        alice.send_json({"type": "JOIN", "data": {"name": "alice", "color": "red"}})
+        receive_until(alice, "JOIN_SUCCESS")
+        bob.send_json({"type": "JOIN", "data": {"name": "bob", "color": "blue"}})
+        receive_until(bob, "JOIN_SUCCESS")
+        alice.send_json({"type": "START", "data": {"size": 10}})
+        wait_game(alice, lambda state: state["started"])
+
+        alice.send_json(
+            {
+                "type": "SPLIT",
+                "data": {"source": {"x": 0, "y": 0}, "targets": [{"x": 1, "y": 0}, {"x": 0, "y": 1}]},
+            }
+        )
+        wait_game(alice, lambda state: len(state["orders"]) == 2)
+
+        alice.send_json({"type": "STAND", "data": {"source": {"x": 0, "y": 0}, "standing": True}})
+        game = wait_game(alice, lambda state: all(order["repeat"] for order in state["orders"]))
+
+        assert len(game["orders"]) == 2
+        assert {order["target"]["x"] + order["target"]["y"] for order in game["orders"]} == {1}
+
+
 def test_reset_clears_the_table(client):
     with client.websocket_connect("/ws") as alice, client.websocket_connect("/ws") as bob:
         receive_until(alice, "CONNECT_SUCCESS")

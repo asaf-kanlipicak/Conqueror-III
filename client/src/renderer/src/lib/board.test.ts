@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import {
   boardSpan,
   capitalOf,
-  clickTile,
+  clearsPlan,
   guardOf,
   isAdjacent,
   isAttack,
@@ -12,6 +12,7 @@ import {
   playerTotals,
   sameCoord,
   shownOrders,
+  stepCursor,
   tileCenter
 } from './board'
 import { BuildingKind, Game, PendingOrder, PlayerColor, TileKind, Tile } from '../types/schema'
@@ -154,8 +155,14 @@ describe('forts', () => {
 })
 
 describe('order counts', () => {
-  function order(repeat: boolean, soldiers: number): PendingOrder {
-    return { player: 'a', source: { x: 0, y: 0 }, target: { x: 1, y: 0 }, soldiers, repeat }
+  function order(repeat: boolean, soldiers: number, parts = 1): PendingOrder {
+    return { player: 'a', source: { x: 0, y: 0 }, target: { x: 1, y: 0 }, soldiers, repeat, parts }
+  }
+
+  function holding(soldiers: number): Game {
+    const game = sample()
+    game.tiles[0][0].soldiers = soldiers
+    return game
   }
 
   it('shows what a one-shot order was given, capped by the tile', () => {
@@ -167,6 +174,34 @@ describe('order counts', () => {
     expect(orderCount(sample(), order(true, 0))).toBe(5)
     expect(orderCount(sample(), order(true, 9))).toBe(5)
   })
+
+  it('shows a standing split as its share of the live garrison', () => {
+    expect(orderCount(holding(200), order(true, 0, 2))).toBe(100)
+    expect(orderCount(holding(300), order(true, 0, 3))).toBe(100)
+  })
+
+  it('rounds a share down, the way the server divides', () => {
+    expect(orderCount(holding(200), order(true, 0, 3))).toBe(66)
+    expect(orderCount(holding(10), order(true, 0, 4))).toBe(2)
+  })
+
+  it('ignores parts on a one-shot, which already carries its share', () => {
+    expect(orderCount(holding(200), order(false, 100, 2))).toBe(100)
+  })
+
+  it('never promises more than the tile holds', () => {
+    expect(orderCount(holding(4), order(true, 0, 3))).toBe(1)
+    expect(orderCount(holding(0), order(true, 0, 2))).toBe(0)
+  })
+
+  it('divides one garrison across its legs without inventing soldiers', () => {
+    const game = holding(200)
+    const legs = [order(true, 0, 3), order(true, 0, 3), order(true, 0, 3)]
+    const shown = legs.reduce((sum, leg) => sum + orderCount(game, leg), 0)
+
+    expect(shown).toBe(198)
+    expect(shown).toBeLessThanOrEqual(200)
+  })
 })
 
 describe('order filter', () => {
@@ -175,7 +210,8 @@ describe('order filter', () => {
     source: { x: 0, y: 0 },
     target: { x: 1, y: 0 },
     soldiers: 5,
-    repeat: false
+    repeat: false,
+    parts: 1
   }
   const standing: PendingOrder = { ...oneShot, source: { x: 2, y: 0 }, repeat: true }
 
@@ -190,29 +226,49 @@ describe('order filter', () => {
   })
 })
 
-describe('board clicks', () => {
+describe('clearing a plan', () => {
   const corner = { x: 0, y: 0 }
   const next = { x: 1, y: 0 }
-  const far = { x: 3, y: 3 }
 
-  it('picks up one of your own tiles and ignores the rest', () => {
-    expect(clickTile(null, corner, true, false)).toEqual({ kind: 'select', coord: corner })
-    expect(clickTile(null, corner, false, false)).toEqual({ kind: 'select', coord: null })
+  it('clears the tile that is already picked', () => {
+    expect(clearsPlan(corner, corner, true, 3)).toBe(true)
+    expect(clearsPlan(corner, corner, true, 1)).toBe(true)
   })
 
-  it('orders into a neighbour, even one that has an order of its own', () => {
-    expect(clickTile(corner, next, true, false)).toEqual({ kind: 'order', source: corner, target: next })
-    expect(clickTile(corner, next, true, true)).toEqual({ kind: 'order', source: corner, target: next })
+  it('leaves every other tile alone', () => {
+    expect(clearsPlan(corner, next, true, 3)).toBe(false)
+    expect(clearsPlan(null, corner, true, 3)).toBe(false)
   })
 
-  it('cancels a picked tile that has an order, and lets go of one that has not', () => {
-    expect(clickTile(corner, corner, true, true)).toEqual({ kind: 'cancel', source: corner })
-    expect(clickTile(corner, corner, true, false)).toEqual({ kind: 'select', coord: null })
+  it('only clears a tile that has orders', () => {
+    expect(clearsPlan(corner, corner, true, 0)).toBe(false)
   })
 
-  it('moves the pick to another tile', () => {
-    expect(clickTile(corner, far, true, false)).toEqual({ kind: 'select', coord: far })
-    expect(clickTile(corner, far, false, false)).toEqual({ kind: 'select', coord: null })
+  it('never clears a tile you do not own', () => {
+    expect(clearsPlan(corner, corner, false, 3)).toBe(false)
+  })
+})
+
+describe('cursor keys', () => {
+  const middle = { x: 2, y: 2 }
+
+  it('walks one tile at a time', () => {
+    expect(stepCursor(middle, 'ArrowLeft', 5)).toEqual({ x: 1, y: 2 })
+    expect(stepCursor(middle, 'ArrowRight', 5)).toEqual({ x: 3, y: 2 })
+    expect(stepCursor(middle, 'ArrowUp', 5)).toEqual({ x: 2, y: 1 })
+    expect(stepCursor(middle, 'ArrowDown', 5)).toEqual({ x: 2, y: 3 })
+  })
+
+  it('stops at the edges instead of wrapping', () => {
+    expect(stepCursor({ x: 0, y: 0 }, 'ArrowLeft', 5)).toEqual({ x: 0, y: 0 })
+    expect(stepCursor({ x: 0, y: 0 }, 'ArrowUp', 5)).toEqual({ x: 0, y: 0 })
+    expect(stepCursor({ x: 4, y: 4 }, 'ArrowRight', 5)).toEqual({ x: 4, y: 4 })
+    expect(stepCursor({ x: 4, y: 4 }, 'ArrowDown', 5)).toEqual({ x: 4, y: 4 })
+  })
+
+  it('ignores any other key', () => {
+    expect(stepCursor(middle, 'Enter', 5)).toBeNull()
+    expect(stepCursor(middle, 'a', 5)).toBeNull()
   })
 })
 

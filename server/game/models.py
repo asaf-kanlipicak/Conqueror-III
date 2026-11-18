@@ -35,6 +35,7 @@ class PendingOrder(BaseModel):
     target: Coord
     soldiers: int
     repeat: bool = False
+    parts: int = 1
 
 
 class ChatLine(BaseModel):

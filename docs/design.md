@@ -72,25 +72,42 @@ not.
    turn, and everyone can see them. A plan dies with its tile: if you lose the source before your
    turn comes, the order is dropped.
 3. A tile gives at most one order per target per turn. Several tiles may attack the same target.
-4. **Splitting**: right-clicking neighbours instead of left-clicking them divides the tile's soldiers
-   between every target picked, floor each, with the remainder left behind. The tile itself can be
-   one of the picks, which is how you send half a stack and keep the other half at home. Four
-   neighbours and 200 soldiers is 50 apiece; three ways is 66 each and 2 kept. A tile needs at least
-   one soldier per way to split at all.
-5. An order carries the soldiers the tile held when you gave it, so reinforcing a tile and ordering
-   from it in the same turn sends only the original garrison onwards. The legs of a split carry their
-   own share, so the second leg is unaffected by what the first one spent.
-6. An order can be set to **stand**: it stays on its tile and runs again at the start of every one of
+4. **Splitting** is the only way to order, and it is the right mouse button. Left-clicking one of
+   your tiles picks it up; right-clicking its neighbours adds them to the plan, and each click
+   re-divides the garrison between every target picked, floor each, remainder left behind. The tile
+   itself can be one of the picks, which is how you send half a stack and keep the other half at
+   home. Four neighbours and 200 soldiers is 50 apiece; three ways is 66 each and 2 kept. A tile with
+   soldiers needs at least one per way to split at all. Right-clicking a target again drops it.
+   Left-clicking never orders anything, so the board can be clicked around freely while reading it —
+   any tile can be picked, enemy or neutral, and a different pick simply moves the ring. Arrow keys
+   walk that same ring tile by tile, so the board can be read without the mouse. Only your own tiles
+   can be ordered from. Clicking the picked tile a second time clears every order on it, which is how
+   a stack is told to stay where it is; Delete does the same from the keyboard. The caption says so
+   whenever there is something to clear.
+5. An order given during your own turn carries the soldiers the tile held at that moment, so
+   reinforcing a tile and ordering from it in the same turn sends only the original garrison onwards.
+   The legs of a split carry their own share, so the second leg is unaffected by what the first one
+   spent.
+6. An order given outside your turn is re-read the moment your turn begins, so it carries whatever
+   the tile has then. That is the only reading that makes sense: it can only ever resolve on your
+   turn, and everything between is somebody else's. Orders are taken from any tile you own, including
+   one standing empty because it marched away last turn — a tile you own at the start of your own turn
+   always has soldiers, since production runs before anyone acts.
+7. An order can be set to **stand**: it stays on its tile and runs again at the start of every one of
    your turns, carrying whatever the tile holds at that moment. That is how a supply line is kept
    running without re-issuing it. A standing order dies with its tile, like any other.
-7. A **move** stands by default and an **attack** does not. Feeding your own land is the thing you
+8. A **move** stands by default and an **attack** does not. Feeding your own land is the thing you
    want repeating — a tile's production keeps flowing down the line — while an attack is a one-off
    unless you deliberately make it a siege. Pointing an order at a different neighbour gives it that
    neighbour's default; leaving it alone keeps whatever you set.
-8. End Turn: orders resolve one by one in the order you issued them, each rolling when it resolves.
-   If a tile has become yours by the time a later order resolves, that order is just a transfer.
-9. Production happens at the start of every round, for all players at once — including one round
-   before the first turn. Turn order is join order.
+9. A split takes each leg's own default, so a split of moves repeats by itself and a split of attacks
+   does not; a mixed split can be both. Standing is a property of the tile, not the leg — pinning any
+   leg pins them all, because they share one garrison. Re-splitting keeps the flags you already set
+   and only fills in the new legs.
+10. End Turn: orders resolve one by one in the order you issued them, each rolling when it resolves.
+    If a tile has become yours by the time a later order resolves, that order is just a transfer.
+11. Production happens at the start of every round, for all players at once — including one round
+    before the first turn. Turn order is join order.
 
 Because a tile acts once per turn, a stack moves at most one tile per turn — standing orders
 included: a line of them walks its soldiers forward one tile a round, not all at once.
@@ -143,6 +160,8 @@ Gold buys buildings, on your own land, on your own turn, 250 apiece.
 | fort     | the tile defends as if it held twice the soldiers             |
 
 - A tile can hold both, but gold is scarce enough that most tiles hold neither.
+- A farm shows as diagonal stripes in a faded shade of the tile's own colour; a fort shows as a
+  chequered frame around the edge. A tile with both wears both.
 - Buildings are **razed** when the tile changes hands, and when an owner is wiped out. Taking a
   developed tile denies it to the enemy rather than inheriting it.
 - No building on water.
@@ -178,24 +197,28 @@ the humans are playing.
 The plan is a flow field. Every tile the bot does not own is a target; a breadth-first search over
 land and water gives every tile its distance to the nearest one. Then, for each of the bot's tiles:
 
-- adjacent to a target — it may strike. It sorts the neighbours by garrison and asks how many it can
-  take at once: the largest `k` where an even share `a / k` still covers the k-th cheapest garrison.
-  At `k` of one it works out its win chance against each neighbour, takes the best of them as its
-  confidence, and rolls; a roll above that confidence means it holds and lets the field feed it,
-  otherwise it picks a neighbour, weighted by those same chances, and attacks it. Above one it rolls
-  against the share's own odds and, if the roll passes, splits the tile across the cheapest `k`
+- adjacent to a target — it may strike. It orders the neighbours by how much it fancies each one at
+  the full stack, then walks them once: for each it works out the share that leg would carry
+  (`a / (k + 1)`, with `k` already committed) and rolls against that share's own odds. A pass commits
+  the neighbour; a fail skips it and the walk carries on, so the cheap ones can be passed over and a
+  stronger one taken instead. Whatever passes divides the garrison between it.
 - otherwise — send everything one step down the field
 
-Splitting is worth it because a share only has to match the garrison, not beat the whole stack: 300
-soldiers against a 60 and a 90 can take both this turn with 150 apiece, where one attack would take
-the 60 and leave the 90 standing. The test is per leg and not on the total, so 400 against 50, 50 and
-350 still buys the two cheap ones even though the sum is larger than the stack.
+One roll per neighbour is the whole decision: it settles both which targets and how many ways at
+once. Nothing forces the bot to stop at the cheapest, so a tile can decline a soft target and throw
+its whole stack at a big army — rare, because everything better has to be passed over first. And
+since each further leg is judged at a thinner share, a hopeless split needs several unlikely rolls in
+a row: ten soldiers against two five hundreds comes out two ways about once in ten thousand turns,
+though it attacks one of them about one turn in fifty.
 
-So a tile at even odds attacks half the time, one at two to one about two thirds, and a tile facing
-nothing better than a third attacks a third of the time. The same roll covers a hopeless case, so a
-desperate push is possible but rare. It is not a decision about whether the attack is *wise*; it is
-a decision about whether the bot feels lucky, which is what keeps two equal armies from standing
-next to each other forever.
+Splitting is worth it because a share only has to match the garrison, not beat the whole stack: 300
+soldiers against a 60 and a 90 can take both with 150 apiece, where one attack would take the 60 and
+leave the 90 standing.
+
+A tile facing one neighbour at even odds attacks half the time, one at two to one about two thirds,
+and one facing nothing better than a third attacks a third of the time. The roll is not a judgement
+about whether the attack is *wise*; it is a judgement about whether the bot feels lucky, which is
+what keeps two equal armies from standing next to each other forever.
 
 Because the flow only ever moves downhill, a stack walks one tile a turn and no two tiles swap. Open
 water is part of the field, so a bot crosses the river the way it crosses land: one tile at a time,

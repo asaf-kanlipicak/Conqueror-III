@@ -40,7 +40,9 @@ export function isAttack(game: Game, move: Move, owner: string | null): boolean 
 
 export function orderCount(game: Game, order: PendingOrder): number {
   const source = game.tiles[order.source.y][order.source.x]
-  return order.repeat ? source.soldiers : Math.min(order.soldiers, source.soldiers)
+  return order.repeat
+    ? Math.min(Math.floor(source.soldiers / order.parts), source.soldiers)
+    : Math.min(order.soldiers, source.soldiers)
 }
 
 export function shownOrders(orders: PendingOrder[], hideStanding: boolean): PendingOrder[] {
@@ -64,19 +66,23 @@ export function boardSpan(side: number): number {
   return side * TILE_SIZE + (side - 1) * TILE_GAP
 }
 
-export type Click =
-  | { kind: 'select'; coord: Coord | null }
-  | { kind: 'order'; source: Coord; target: Coord }
-  | { kind: 'cancel'; source: Coord }
+export function clearsPlan(picked: Coord | null, coord: Coord, owned: boolean, legs: number): boolean {
+  return owned && legs > 0 && picked !== null && sameCoord(picked, coord)
+}
 
-export function clickTile(selected: Coord | null, coord: Coord, mine: boolean, queued: boolean): Click {
-  if (selected && sameCoord(selected, coord)) {
-    return queued ? { kind: 'cancel', source: coord } : { kind: 'select', coord: null }
+export function stepCursor(from: Coord, key: string, size: number): Coord | null {
+  const steps: Record<string, Coord> = {
+    ArrowLeft: { x: -1, y: 0 },
+    ArrowRight: { x: 1, y: 0 },
+    ArrowUp: { x: 0, y: -1 },
+    ArrowDown: { x: 0, y: 1 }
   }
-  if (selected && isAdjacent(selected, coord)) {
-    return { kind: 'order', source: selected, target: coord }
+  const step = steps[key]
+  if (!step) return null
+  return {
+    x: Math.min(size - 1, Math.max(0, from.x + step.x)),
+    y: Math.min(size - 1, Math.max(0, from.y + step.y))
   }
-  return { kind: 'select', coord: mine ? coord : null }
 }
 
 export function tileCenter(coord: Coord): { x: number; y: number } {

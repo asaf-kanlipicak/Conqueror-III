@@ -25,8 +25,8 @@ function App() {
     reset,
     addBot,
     kick,
-    order,
     split,
+    stand,
     cancel,
     build,
     chat,
@@ -63,9 +63,7 @@ function App() {
             key={`${game.started_at ?? 'lobby'}:${game.size}`}
             game={game}
             myId={myId}
-            onOrder={order}
             onSplit={split}
-            onCancel={cancel}
             onPick={setPicked}
           />
 
@@ -82,7 +80,7 @@ function App() {
           myId={myId}
           myTurn={myTurn}
           orders={orders}
-          onOrder={order}
+          onStand={stand}
           onCancelOrder={cancel}
           onEndTurn={endTurn}
           onPause={pause}

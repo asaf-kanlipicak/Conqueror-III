@@ -1,5 +1,6 @@
 import pytest
 
+from game.constants import PRODUCTION
 from game.enums import BuildingKind, PlayerColor
 from game.models import Tile
 from game.schemas import Coord
@@ -140,7 +141,7 @@ def test_an_empty_split_clears_the_tile():
     assert legs(state, at(5, 5)) == []
 
 
-def test_a_split_order_is_one_shot():
+def test_a_split_attack_is_one_shot_by_default():
     state, alice, _ = table()
     put(state, alice, 5, 5, 200)
     bare(state, 4, 5)
@@ -148,6 +149,44 @@ def test_a_split_order_is_one_shot():
     state.split_order(alice.id, at(5, 5), [at(4, 5)])
 
     assert all(order.repeat is False for order in state.game.orders)
+
+
+def test_a_split_of_moves_stands_by_default():
+    state, alice, _ = table()
+    put(state, alice, 5, 5, 200)
+    put(state, alice, 4, 5, 0)
+    put(state, alice, 6, 5, 0)
+
+    state.split_order(alice.id, at(5, 5), [at(4, 5), at(6, 5)])
+
+    assert all(order.repeat for order in state.game.orders)
+
+
+def test_a_mixed_split_takes_each_legs_default():
+    state, alice, bob = table()
+    put(state, alice, 5, 5, 200)
+    put(state, alice, 4, 5, 0)
+    put(state, bob, 6, 5, 100)
+
+    state.split_order(alice.id, at(5, 5), [at(4, 5), at(6, 5)])
+
+    assert [(order.target, order.repeat) for order in state.game.orders] == [
+        (at(4, 5), True),
+        (at(6, 5), False),
+    ]
+
+
+def test_re_splitting_keeps_a_flag_you_set():
+    state, alice, _ = table()
+    put(state, alice, 5, 5, 200)
+    put(state, alice, 4, 5, 0)
+    state.split_order(alice.id, at(5, 5), [at(4, 5)])
+    assert state.game.orders[0].repeat is True
+
+    state.set_repeat(alice.id, at(5, 5), False)
+    state.split_order(alice.id, at(5, 5), [at(4, 5)])
+
+    assert state.game.orders[0].repeat is False
 
 
 def test_a_split_needs_adjacent_targets():
@@ -174,12 +213,32 @@ def test_a_split_needs_your_own_tile():
         state.split_order(alice.id, at(5, 5), [at(4, 5)])
 
 
-def test_a_split_needs_soldiers():
+def test_an_empty_tile_can_still_be_split():
     state, alice, _ = table()
     put(state, alice, 5, 5, 0)
+    bare(state, 4, 5)
+    bare(state, 6, 5)
 
-    with pytest.raises(StateError, match="no soldiers"):
-        state.split_order(alice.id, at(5, 5), [at(4, 5)])
+    state.split_order(alice.id, at(5, 5), [at(4, 5), at(6, 5)])
+
+    assert legs(state, at(5, 5)) == [(at(4, 5), 0), (at(6, 5), 0)]
+    assert all(order.parts == 2 for order in state.game.orders)
+
+
+def test_a_standing_split_of_an_empty_tile_fills_in():
+    state, alice, bob = table()
+    put(state, alice, 5, 5, 0)
+    bare(state, 4, 5)
+    bare(state, 6, 5)
+    state.end_turn(alice.id)
+    state.split_order(alice.id, at(5, 5), [at(4, 5), at(6, 5)])
+    state.set_repeat(alice.id, at(5, 5), True)
+
+    state.end_turn(bob.id)
+    state.end_turn(alice.id)
+
+    assert state.tile(at(4, 5)).soldiers == 5
+    assert state.tile(at(6, 5)).soldiers == 5
 
 
 def test_a_split_needs_soldiers_for_every_leg():
@@ -223,6 +282,79 @@ def test_a_cancel_takes_one_leg():
     state.remove_order(alice.id, at(5, 5), at(6, 5))
 
     assert legs(state, at(5, 5)) == [(at(4, 5), 100)]
+
+
+def test_standing_one_leg_keeps_the_others():
+    state, alice, _ = table()
+    put(state, alice, 5, 5, 200)
+    bare(state, 4, 5)
+    bare(state, 6, 5)
+    state.split_order(alice.id, at(5, 5), [at(4, 5), at(6, 5)])
+
+    state.set_repeat(alice.id, at(5, 5), True)
+
+    assert legs(state, at(5, 5)) == [(at(4, 5), 100), (at(6, 5), 100)]
+    assert all(order.repeat for order in state.game.orders)
+
+
+def test_a_split_stands_as_one():
+    state, alice, _ = table()
+    put(state, alice, 5, 5, 200)
+    bare(state, 4, 5)
+    bare(state, 6, 5)
+    state.split_order(alice.id, at(5, 5), [at(4, 5), at(6, 5)])
+
+    state.set_repeat(alice.id, at(5, 5), True)
+    state.set_repeat(alice.id, at(5, 5), False)
+
+    assert not any(order.repeat for order in state.game.orders)
+    assert len(state.game.orders) == 2
+
+
+def test_a_standing_split_is_redivided_each_round():
+    state, alice, bob = table()
+    put(state, alice, 5, 5, 200)
+    bare(state, 4, 5)
+    bare(state, 6, 5)
+    state.split_order(alice.id, at(5, 5), [at(4, 5), at(6, 5)])
+    state.set_repeat(alice.id, at(5, 5), True)
+    state.end_turn(alice.id)
+
+    state.tile(at(5, 5)).soldiers = 300
+    bare(state, 4, 5)
+    bare(state, 6, 5)
+    state.end_turn(bob.id)
+    share = (300 + PRODUCTION) // 2
+    state.end_turn(alice.id)
+
+    assert state.tile(at(4, 5)).soldiers == share
+    assert state.tile(at(6, 5)).soldiers == share
+
+
+def test_a_standing_split_keeps_its_home_share():
+    state, alice, bob = table()
+    put(state, alice, 5, 5, 200)
+    bare(state, 4, 5)
+    state.split_order(alice.id, at(5, 5), [at(4, 5), at(5, 5)])
+    state.set_repeat(alice.id, at(5, 5), True)
+    state.end_turn(alice.id)
+
+    state.tile(at(5, 5)).soldiers = 300
+    bare(state, 4, 5)
+    state.end_turn(bob.id)
+    share = (300 + PRODUCTION) // 2
+    state.end_turn(alice.id)
+
+    assert state.tile(at(4, 5)).soldiers == share
+    assert state.tile(at(5, 5)).soldiers == share
+
+
+def test_standing_a_tile_with_no_order_is_refused():
+    state, alice, _ = table()
+    put(state, alice, 5, 5, 200)
+
+    with pytest.raises(StateError, match="no order"):
+        state.set_repeat(alice.id, at(5, 5), True)
 
 
 def test_a_cancel_without_a_target_takes_the_whole_tile():
@@ -280,3 +412,83 @@ def test_a_split_never_carries_a_fort():
     state.split_order(alice.id, at(5, 5), [at(4, 5)])
 
     assert legs(state, at(5, 5)) == [(at(4, 5), 200)]
+
+
+def test_every_leg_carries_the_same_share():
+    state, alice, _ = table()
+    put(state, alice, 5, 5, 200)
+    for coord in (at(4, 5), at(6, 5), at(5, 4)):
+        bare(state, coord.x, coord.y)
+
+    state.split_order(alice.id, at(5, 5), [at(4, 5), at(6, 5), at(5, 4)])
+
+    assert [order.soldiers for order in state.game.orders] == [66, 66, 66]
+
+
+def test_all_legs_of_a_tile_agree_on_their_parts():
+    state, alice, _ = table()
+    put(state, alice, 5, 5, 200)
+    bare(state, 4, 5)
+    bare(state, 6, 5)
+
+    state.split_order(alice.id, at(5, 5), [at(4, 5), at(6, 5)])
+    state.set_repeat(alice.id, at(5, 5), True)
+    state.split_order(alice.id, at(5, 5), [at(4, 5), at(6, 5), at(5, 4)])
+
+    assert {order.parts for order in state.game.orders} == {3}
+
+
+def test_the_legs_never_send_more_than_the_garrison():
+    state, alice, _ = table()
+    put(state, alice, 5, 5, 200)
+    for coord in (at(4, 5), at(6, 5), at(5, 4)):
+        bare(state, coord.x, coord.y)
+
+    state.split_order(alice.id, at(5, 5), [at(4, 5), at(6, 5), at(5, 4)])
+
+    assert sum(order.soldiers for order in state.game.orders) <= state.tile(at(5, 5)).soldiers
+
+
+def test_a_cancelled_leg_leaves_the_rest_dividing_by_the_group():
+    state, alice, _ = table()
+    put(state, alice, 5, 5, 200)
+    bare(state, 4, 5)
+    bare(state, 6, 5)
+    state.split_order(alice.id, at(5, 5), [at(4, 5), at(6, 5)])
+
+    state.remove_order(alice.id, at(5, 5), at(6, 5))
+
+    assert legs(state, at(5, 5)) == [(at(4, 5), 100)]
+    assert state.game.orders[0].parts == 2
+
+
+def test_a_standing_split_is_rederived_from_the_live_garrison():
+    state, alice, bob = table()
+    put(state, alice, 5, 5, 200)
+    bare(state, 4, 5)
+    bare(state, 6, 5)
+    state.split_order(alice.id, at(5, 5), [at(4, 5), at(6, 5)])
+    state.set_repeat(alice.id, at(5, 5), True)
+    state.end_turn(alice.id)
+
+    state.tile(at(5, 5)).soldiers = 90
+    bare(state, 4, 5)
+    bare(state, 6, 5)
+    state.end_turn(bob.id)
+    state.end_turn(alice.id)
+
+    assert state.tile(at(4, 5)).soldiers == 50
+    assert state.tile(at(6, 5)).soldiers == 50
+
+
+def test_a_leg_carries_its_share_not_the_garrison():
+    state, alice, _ = table()
+    put(state, alice, 5, 5, 200)
+    bare(state, 4, 5)
+    bare(state, 6, 5)
+
+    state.split_order(alice.id, at(5, 5), [at(4, 5), at(6, 5)])
+    state.set_repeat(alice.id, at(5, 5), True)
+
+    live = state.tile(at(5, 5)).soldiers
+    assert all(order.soldiers == live // order.parts for order in state.game.orders)

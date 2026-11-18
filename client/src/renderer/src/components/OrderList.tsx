@@ -6,11 +6,11 @@ interface OrderListProps {
   game: Game
   myId: string | null
   orders: PendingOrder[]
-  onOrder: (source: Coord, target: Coord, repeat: boolean) => void
+  onStand: (source: Coord, standing: boolean) => void
   onCancel: (source: Coord, target?: Coord) => void
 }
 
-export function OrderList({ game, myId, orders, onOrder, onCancel }: OrderListProps) {
+export function OrderList({ game, myId, orders, onStand, onCancel }: OrderListProps) {
   const [hideStanding, setHideStanding] = useState(false)
 
   const standing = orders.filter((order) => order.repeat)
@@ -48,7 +48,7 @@ export function OrderList({ game, myId, orders, onOrder, onCancel }: OrderListPr
               <span className="kind">{isAttack(game, move, myId) ? 'attack' : 'move'}</span>
               <button
                 className={`hold${move.repeat ? ' on' : ''}`}
-                onClick={() => onOrder(move.source, move.target, !move.repeat)}
+                onClick={() => onStand(move.source, !move.repeat)}
                 title={move.repeat ? 'standing · runs every round' : 'one shot'}
               >
                 <svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true">
